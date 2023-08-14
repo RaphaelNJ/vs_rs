@@ -21,6 +21,8 @@ pub enum NodeResponse<UserResponse: UserResponseTrait, NodeData: NodeDataTrait> 
     ConnectEventEnded {
         output: OutputId,
         input: InputId,
+        node_input: NodeId,
+        node_output: NodeId,
     },
     CreatedNode(NodeId),
     SelectNode(NodeId),
@@ -386,7 +388,7 @@ where
                 NodeResponse::ConnectEventStarted(node_id, port) => {
                     self.connection_in_progress = Some((*node_id, *port));
                 }
-                NodeResponse::ConnectEventEnded { input, output } => {
+                NodeResponse::ConnectEventEnded { input, output, node_input: _, node_output: _ } => {
                     self.graph.add_connection(*output, *input)
                 }
                 NodeResponse::CreatedNode(_) => {
@@ -833,7 +835,7 @@ where
                         match (param_id, origin_param) {
                             (AnyParameterId::Input(input), AnyParameterId::Output(output))
                             | (AnyParameterId::Output(output), AnyParameterId::Input(input)) => {
-                                responses.push(NodeResponse::ConnectEventEnded { input, output });
+                                responses.push(NodeResponse::ConnectEventEnded { input, output, node_input: origin_node, node_output: node_id });
                             }
                             _ => { /* Ignore in-in or out-out connections */ }
                         }
