@@ -8,6 +8,7 @@ use egui_node_graph::*;
 /// The NodeData holds a custom data struct inside each node. It's useful to
 /// store additional information that doesn't live in parameters. For this
 /// example, the node data stores the template (i.e. the "type") of the node.
+#[derive(Debug)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct MyNodeData {
     template: MyNodeTemplate,
@@ -16,7 +17,7 @@ pub struct MyNodeData {
 /// `DataType`s are what defines the possible range of connections when
 /// attaching two ports together. The graph UI will make sure to not allow
 /// attaching incompatible datatypes.
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum MyDataType {
     Scalar,
@@ -68,7 +69,7 @@ impl MyValueType {
 /// NodeTemplate is a mechanism to define node templates. It's what the graph
 /// will display in the "new node" popup. The user code needs to tell the
 /// library how to convert a NodeTemplate into a Node.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum MyNodeTemplate {
     MakeScalar,
@@ -179,7 +180,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 name.to_string(),
                 MyDataType::Scalar,
                 MyValueType::Scalar { value: 0.0 },
-                InputParamKind::ConnectionOnly,
+                InputParamKind::ConnectionOrConstant,
                 true,
             );
         };
@@ -191,7 +192,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 MyValueType::Vec2 {
                     value: egui::vec2(0.0, 0.0),
                 },
-                InputParamKind::ConnectionOnly,
+                InputParamKind::ConnectionOrConstant,
                 true,
             );
         };
@@ -219,7 +220,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
                     // The input parameter kind. This allows defining whether a
                     // parameter accepts input connections and/or an inline
                     // widget to set its value.
-                    InputParamKind::ConnectionOrConstant,
+                    InputParamKind::ConnectionOnly,
                     true,
                 );
                 input_scalar(graph, "B");
@@ -448,6 +449,17 @@ impl eframe::App for NodeGraphExample {
                     MyResponse::ClearActiveNode => self.user_state.active_node = None,
                 }
             }
+            if let NodeResponse::ConnectEventEnded { output, input, node_input: _, node_output: _ } = node_response {
+                
+
+                // Check if the output can be send to differents inputs
+                if let Some(out) =  self.state.graph.outputs.get(output) {
+                    if out.typ == MyDataType::Scalar {
+                        // Remove all the others connections with the same input.
+                        self.state.graph.connections.retain(|inp, out| !(inp != input && *out == output));
+                    }
+                }
+            }
         }
 
         if let Some(node) = self.user_state.active_node {
@@ -537,6 +549,22 @@ pub fn evaluate_node(
 
     let node = &graph[node_id];
     let mut evaluator = Evaluator::new(graph, outputs_cache, node_id);
+
+
+
+    
+    println!("\n\n\n{:?}", graph[node_id]);
+    println!("{:?}", graph[node_id].get_input("B"));
+    if let Ok(t) = evaluator.evaluate_input("B") {
+        println!("{:?}", t);
+    } else {
+        println!("NO B")
+    }
+    println!("{:?}", graph.connections);
+
+
+
+
     match node.user_data.template {
         MyNodeTemplate::AddScalar => {
             let a = evaluator.input_scalar("A")?;
