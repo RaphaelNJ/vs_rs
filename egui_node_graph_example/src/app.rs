@@ -1,7 +1,17 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::fmt;
+use std::{ borrow::Cow, collections::HashMap, hash::Hash };
 
-use eframe::egui::{self, DragValue, TextStyle};
+use eframe::egui::{ self, DragValue, TextStyle, Grid, ScrollArea, TextEdit, Window };
 use egui_node_graph::*;
+use egui_file::FileDialog;
+use std::path::PathBuf;
+
+use std::fs::{ File, OpenOptions };
+use std::io::{ Read, Write };
+use bincode;
+
+#[cfg(feature = "persistence")]
+use serde::{ Deserialize, Serialize };
 
 // ========= First, define your user data types =============
 
@@ -34,8 +44,12 @@ pub enum MyDataType {
 #[derive(Copy, Clone, Debug)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum MyValueType {
-    Vec2 { value: egui::Vec2 },
-    Scalar { value: f32 },
+    Vec2 {
+        value: egui::Vec2,
+    },
+    Scalar {
+        value: f32,
+    },
 }
 
 impl Default for MyValueType {
@@ -100,6 +114,19 @@ pub struct MyGraphState {
     pub active_node: Option<NodeId>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
+pub enum SaveOrLoad {
+    Save,
+    Load,
+}
+
+impl Default for SaveOrLoad {
+    fn default() -> Self {
+        SaveOrLoad::Load
+    }
+}
+
 // =========== Then, you need to implement some traits ============
 
 // A trait for the data types, to tell the library how to display them
@@ -143,10 +170,10 @@ impl NodeTemplateTrait for MyNodeTemplate {
     // this is what allows the library to show collapsible lists in the node finder.
     fn node_finder_categories(&self, _user_state: &mut Self::UserState) -> Vec<&'static str> {
         match self {
-            MyNodeTemplate::MakeScalar
+            | MyNodeTemplate::MakeScalar
             | MyNodeTemplate::AddScalar
             | MyNodeTemplate::SubtractScalar => vec!["Scalar"],
-            MyNodeTemplate::MakeVector
+            | MyNodeTemplate::MakeVector
             | MyNodeTemplate::AddVector
             | MyNodeTemplate::SubtractVector => vec!["Vector"],
             MyNodeTemplate::VectorTimesScalar => vec!["Vector", "Scalar"],
@@ -167,7 +194,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
         &self,
         graph: &mut Graph<Self::NodeData, Self::DataType, Self::ValueType>,
         _user_state: &mut Self::UserState,
-        node_id: NodeId,
+        node_id: NodeId
     ) {
         // The nodes are created empty by default. This function needs to take
         // care of creating the desired inputs and outputs based on the template
@@ -181,7 +208,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 MyDataType::Scalar,
                 MyValueType::Scalar { value: 0.0 },
                 InputParamKind::ConnectionOrConstant,
-                true,
+                true
             );
         };
         let input_vector = |graph: &mut MyGraph, name: &str| {
@@ -193,7 +220,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
                     value: egui::vec2(0.0, 0.0),
                 },
                 InputParamKind::ConnectionOrConstant,
-                true,
+                true
             );
         };
 
@@ -221,7 +248,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
                     // parameter accepts input connections and/or an inline
                     // widget to set its value.
                     InputParamKind::ConnectionOnly,
-                    true,
+                    true
                 );
                 input_scalar(graph, "B");
                 output_scalar(graph, "out");
@@ -274,7 +301,7 @@ impl NodeTemplateIter for AllMyNodeTemplates {
             MyNodeTemplate::SubtractScalar,
             MyNodeTemplate::AddVector,
             MyNodeTemplate::SubtractVector,
-            MyNodeTemplate::VectorTimesScalar,
+            MyNodeTemplate::VectorTimesScalar
         ]
     }
 }
@@ -290,7 +317,7 @@ impl WidgetValueTrait for MyValueType {
         ui: &mut egui::Ui,
         _user_state: &mut MyGraphState,
         _node_data: &MyNodeData,
-        _kind: InputParamKind,
+        _kind: InputParamKind
     ) -> Vec<MyResponse> {
         // This trait is used to tell the library which UI to display for the
         // inline parameter widgets.
@@ -298,7 +325,7 @@ impl WidgetValueTrait for MyValueType {
         let should_draw = match _kind {
             InputParamKind::ConnectionOnly => false,
             InputParamKind::ConnectionOrConstant => true,
-            InputParamKind::ConstantOnly => true
+            InputParamKind::ConstantOnly => true,
         };
 
         if !should_draw {
@@ -345,10 +372,9 @@ impl NodeDataTrait for MyNodeData {
         ui: &mut egui::Ui,
         node_id: NodeId,
         _graph: &Graph<MyNodeData, MyDataType, MyValueType>,
-        user_state: &mut Self::UserState,
+        user_state: &mut Self::UserState
     ) -> Vec<NodeResponse<MyResponse, MyNodeData>>
-    where
-        MyResponse: UserResponseTrait,
+        where MyResponse: UserResponseTrait
     {
         // This logic is entirely up to the user. In this case, we check if the
         // current node we're drawing is the active one, by comparing against
@@ -356,10 +382,7 @@ impl NodeDataTrait for MyNodeData {
         // UIs based on that.
 
         let mut responses = vec![];
-        let is_active = user_state
-            .active_node
-            .map(|id| id == node_id)
-            .unwrap_or(false);
+        let is_active = user_state.active_node.map(|id| id == node_id).unwrap_or(false);
 
         // Pressing the button will emit a custom user response to either set,
         // or clear the active node. These responses do nothing by themselves,
@@ -370,9 +393,9 @@ impl NodeDataTrait for MyNodeData {
                 responses.push(NodeResponse::User(MyResponse::SetActiveNode(node_id)));
             }
         } else {
-            let button =
-                egui::Button::new(egui::RichText::new("👁 Active").color(egui::Color32::BLACK))
-                    .fill(egui::Color32::GOLD);
+            let button = egui::Button
+                ::new(egui::RichText::new("👁 Active").color(egui::Color32::BLACK))
+                .fill(egui::Color32::GOLD);
             if ui.add(button).clicked() {
                 responses.push(NodeResponse::User(MyResponse::ClearActiveNode));
             }
@@ -383,10 +406,16 @@ impl NodeDataTrait for MyNodeData {
 }
 
 type MyGraph = Graph<MyNodeData, MyDataType, MyValueType>;
-type MyEditorState =
-    GraphEditorState<MyNodeData, MyDataType, MyValueType, MyNodeTemplate, MyGraphState>;
+type MyEditorState = GraphEditorState<
+    MyNodeData,
+    MyDataType,
+    MyValueType,
+    MyNodeTemplate,
+    MyGraphState
+>;
 
 #[derive(Default)]
+#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
 pub struct NodeGraphExample {
     // The `GraphEditorState` is the top-level object. You "register" all your
     // custom types by specifying it as its generic parameters.
@@ -403,8 +432,7 @@ impl NodeGraphExample {
     /// If the persistence feature is enabled, Called once before the first frame.
     /// Load previous app state (if any).
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let state = cc
-            .storage
+        let state = cc.storage
             .and_then(|storage| eframe::get_value(storage, PERSISTENCE_KEY))
             .unwrap_or_default();
         Self {
@@ -414,7 +442,604 @@ impl NodeGraphExample {
     }
 }
 
-impl eframe::App for NodeGraphExample {
+#[cfg(feature = "persistence")]
+impl NodeGraphExample {
+    // Save the struct to the specified location using bincode
+    pub fn save_to_file(&self, file_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+        let mut file = OpenOptions::new().write(true).create(true).truncate(true).open(file_path)?;
+
+        let encoded = bincode::serialize(self)?;
+        file.write_all(&encoded)?;
+
+        Ok(())
+    }
+
+    // Load the struct from the specified location using bincode
+    pub fn load_from_file(file_path: &PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut file = File::open(file_path)?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+
+        let decoded: Self = bincode::deserialize(&buffer)?;
+
+        Ok(decoded)
+    }
+
+    pub fn load(&mut self, file_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+        *self = NodeGraphExample::load_from_file(file_path)?;
+        Ok(())
+    }
+}
+
+pub struct App {
+    pub graph: NodeGraphExample,
+    pub save_load_actions: Option<PathBuf>,
+    pub open_file_dialog: Option<(FileDialog, SaveOrLoad)>,
+    pub functions: Vec<GraphFunction>,
+    pub current_function: usize,
+    pub new_function_window: Option<CreateFunctionDialog>,
+}
+
+pub struct CreateFunctionDialog {
+    pub name: String,
+    pub input: Vec<FunctionIO>,
+    pub output: Vec<FunctionIO>,
+}
+
+pub struct GraphFunction {
+    pub graph: NodeGraphExample,
+    pub name: String,
+    pub removable: bool,
+    pub modifiable_name: bool,
+    pub variables_list: Vec<Variable>,
+    pub input: Vec<FunctionIO>,
+    pub output: Vec<FunctionIO>,
+}
+
+pub struct FunctionIO {
+    pub name: String,
+    pub value: VariableValue,
+}
+
+pub struct Variable {
+    pub name: String,
+    pub value: VariableValue,
+    pub removable: bool,
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub enum VariableValue {
+    String(String),
+    Integer(f64),
+    Float(f64),
+    Boolean(bool),
+}
+
+fn show_functionio(
+    row_index: usize,
+    function_oi: &mut FunctionIO,
+    ui: &mut egui::Ui,
+    id: &str
+) -> (Option<String>, bool) {
+    let default_variable_values = [
+        (VariableValue::String("".to_owned()), "String"),
+        (VariableValue::Integer(0.0), "Integer"),
+        (VariableValue::Float(0.0), "Float"),
+        (VariableValue::Boolean(true), "Boolean"),
+    ];
+
+    let mut changed = (None, false);
+
+    let mut function_name = function_oi.name.to_string();
+
+    if ui.add(TextEdit::singleline(&mut function_name).desired_width(133.0)).changed() {
+        changed.0 = Some(function_name);
+    }
+
+    egui::ComboBox
+        ::from_id_source(format!("{}{id}", row_index))
+        .selected_text(function_oi.value.to_string())
+        .width(74.0)
+        .show_ui(ui, |ui| {
+            for (value, name) in &default_variable_values {
+                ui.selectable_value(&mut function_oi.value, value.clone(), name.to_string());
+            }
+        });
+    match function_oi.value {
+        VariableValue::String(ref mut x) => {
+            ui.add(TextEdit::singleline(x).desired_width(100.0));
+        }
+        VariableValue::Integer(ref mut x) => {
+            ui.add(egui::DragValue::new(x).speed(1.0));
+            *x = x.round();
+        }
+        VariableValue::Float(ref mut x) => {
+            ui.add(egui::DragValue::new(x).speed(0.1));
+        }
+        VariableValue::Boolean(ref mut x) => {
+            ui.checkbox(x, "".to_string());
+        }
+    }
+    if ui.button("x").clicked() {
+        changed.1 = true;
+    }
+    changed
+}
+
+impl fmt::Display for VariableValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VariableValue::String(_) => write!(f, "String"),
+            VariableValue::Integer(_) => write!(f, "Integer"),
+            VariableValue::Float(_) => write!(f, "Float"),
+            VariableValue::Boolean(_) => write!(f, "Boolean"),
+        }
+    }
+}
+
+impl Default for CreateFunctionDialog {
+    fn default() -> Self {
+        Self { name: "new_function".to_string(), input: vec![], output: vec![] }
+    }
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self {
+            graph: NodeGraphExample::default(),
+            save_load_actions: None,
+            open_file_dialog: None,
+            functions: vec![GraphFunction {
+                graph: NodeGraphExample::default(),
+                name: "Main".to_owned(),
+                removable: false,
+                modifiable_name: false,
+                variables_list: vec![
+                    Variable {
+                        name: "Hello".to_string(),
+                        value: VariableValue::String("World !".to_string()),
+                        removable: true,
+                    },
+                    Variable {
+                        name: "Hello_World".to_string(),
+                        value: VariableValue::Boolean(true),
+                        removable: true,
+                    }
+                ],
+                input: vec![],
+                output: vec![],
+            }],
+            current_function: 0,
+            new_function_window: None,
+        }
+    }
+}
+
+trait GetName {
+    fn get_name(&self) -> String;
+}
+
+fn uniquify_name(input_name: String, vec: &Vec<impl GetName>) -> String {
+    let mut times = 0;
+    let name = input_name.replace(" ", "_");
+    loop {
+        let x = 'x: {
+            for obj in vec.iter() {
+                if times == 0 {
+                    if obj.get_name() == name {
+                        times += 1;
+                        break 'x true;
+                    }
+                } else {
+                    if format!("{}_{}", name, times) == obj.get_name() {
+                        times += 1;
+                        break 'x true;
+                    }
+                }
+            }
+            false
+        };
+        if !x {
+            if times == 0 {
+                return name;
+            }
+            return format!("{}_{}", name, times);
+        }
+    }
+}
+
+impl GetName for GraphFunction {
+    fn get_name(&self) -> String {
+        self.name.clone()
+    }
+}
+
+impl GetName for FunctionIO {
+    fn get_name(&self) -> String {
+        self.name.clone()
+    }
+}
+
+impl GetName for Variable {
+    fn get_name(&self) -> String {
+        self.name.clone()
+    }
+}
+
+impl eframe::App for App {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        self.graph.update(ctx, frame);
+        egui::TopBottomPanel::top("top").show(ctx, |ui| {
+            egui::menu::bar(ui, |ui| {
+                egui::widgets::global_dark_light_mode_switch(ui);
+                if ui.button("Open").clicked() {
+                    let mut dialog = FileDialog::open_file(self.save_load_actions.clone());
+                    dialog.open();
+                    self.open_file_dialog = Some((dialog, SaveOrLoad::Load));
+                }
+                if ui.button("Save").clicked() {
+                    let mut dialog = FileDialog::save_file(self.save_load_actions.clone());
+                    dialog.open();
+                    self.open_file_dialog = Some((dialog, SaveOrLoad::Save));
+                }
+                if ui.button("Compile").clicked() {
+                    // TODO
+                }
+            });
+            if let Some(dialog) = &mut self.open_file_dialog {
+                if dialog.0.show(ctx).selected() {
+                    #[cfg(feature = "persistence")]
+                    if let Some(file) = dialog.0.path() {
+                        self.save_load_actions = Some(file.to_path_buf());
+                        match dialog.1 {
+                            SaveOrLoad::Load => {
+                                self.graph.load(&file.to_path_buf());
+                                println!("Load : {:?}", file.to_path_buf());
+                            }
+                            SaveOrLoad::Save => {
+                                self.graph.save_to_file(&file.to_path_buf());
+                                println!("Save : {:?}", file.to_path_buf());
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Render The functions tab
+        egui::SidePanel::left("funcs").show(ctx, |ui| {
+            ui.set_min_width(190.0);
+            ui.set_max_width(190.0);
+
+            egui::TopBottomPanel::top("add_func").show_inside(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    if ui.button("+ Add Function").clicked() {
+                        self.new_function_window = Some(CreateFunctionDialog::default());
+                    }
+                });
+            });
+
+            let mut to_remove = None;
+            let mut to_modify = (None, String::new());
+            let mut change_current_function = None;
+
+            ScrollArea::vertical()
+                .auto_shrink([false; 2])
+                .min_scrolled_height(64.0)
+                .show(ui, |ui| {
+                    ui.vertical(|ui| {
+                        for (index, function) in self.functions.iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                let mut function_name = function.name.to_string();
+
+                                if
+                                    ui
+                                        .selectable_label(self.current_function == index, "↪")
+                                        .clicked()
+                                {
+                                    change_current_function = Some(index);
+                                }
+                                if function.modifiable_name {
+                                    if
+                                        ui
+                                            .add(
+                                                TextEdit::singleline(
+                                                    &mut function_name
+                                                ).desired_width(133.0)
+                                            )
+                                            .changed()
+                                    {
+                                        to_modify.1 = function_name;
+                                        to_modify.0 = Some(index);
+                                    }
+                                } else {
+                                    ui.label(function_name);
+                                }
+                                if function.removable {
+                                    if ui.button("x").clicked() {
+                                        to_remove = Some(index);
+                                    }
+                                }
+                            });
+                        }
+                    });
+                });
+
+            if let Some(index) = to_modify.0 {
+                self.functions[index].name = uniquify_name(to_modify.1, &self.functions);
+            }
+
+            if let Some(index) = to_remove {
+                self.functions.remove(index);
+                self.current_function = 0;
+            }
+            if let Some(index) = change_current_function {
+                self.functions[self.current_function].graph = std::mem::replace(
+                    &mut self.graph,
+                    std::mem::replace(&mut self.functions[index].graph, NodeGraphExample::default())
+                );
+                self.current_function = index;
+            }
+        });
+
+        // Render The variables tab
+        egui::SidePanel::right("vars").show(ctx, |ui| {
+            ui.set_min_width(345.0);
+            ui.set_max_width(345.0);
+
+            egui::TopBottomPanel::top("add_var").show_inside(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    if ui.button("+ Add Variable").clicked() {
+                        let new_variable = Variable {
+                            name: uniquify_name(
+                                "new".to_string(),
+                                &self.functions[self.current_function].variables_list
+                            ),
+                            value: VariableValue::Boolean(true),
+                            removable: true,
+                        };
+                        self.functions[self.current_function].variables_list.push(new_variable);
+                    }
+                });
+            });
+
+            let mut to_remove = None;
+            let mut name_changed = (None, String::new());
+
+            ScrollArea::vertical()
+                .auto_shrink([false; 2])
+                .min_scrolled_height(64.0)
+                .show(ui, |ui| {
+                    ui.vertical(|ui| {
+                        for (index, variable) in self.functions[
+                            self.current_function
+                        ].variables_list
+                            .iter_mut()
+                            .enumerate() {
+                            ui.horizontal(|ui| {
+                                let mut variable_name = variable.name.to_string();
+                                if
+                                    ui
+                                        .add(
+                                            TextEdit::singleline(&mut variable_name).desired_width(
+                                                133.0
+                                            )
+                                        )
+                                        .changed()
+                                {
+                                    name_changed.0 = Some(index);
+                                    name_changed.1 = variable_name;
+                                }
+
+                                let default_variable_values = [
+                                    (VariableValue::String("".to_owned()), "String"),
+                                    (VariableValue::Integer(0.0), "Integer"),
+                                    (VariableValue::Float(0.0), "Float"),
+                                    (VariableValue::Boolean(true), "Boolean"),
+                                ];
+
+                                egui::ComboBox
+                                    ::from_id_source(index)
+                                    .selected_text(variable.value.to_string())
+                                    .width(74.0)
+                                    .show_ui(ui, |ui| {
+                                        for (value, name) in &default_variable_values {
+                                            ui.selectable_value(
+                                                &mut variable.value,
+                                                value.clone(),
+                                                name.to_string()
+                                            );
+                                        }
+                                    });
+
+                                match variable.value {
+                                    VariableValue::String(ref mut x) => {
+                                        ui.add(TextEdit::singleline(x).desired_width(100.0));
+                                    }
+                                    VariableValue::Integer(ref mut x) => {
+                                        ui.add(egui::DragValue::new(x).speed(1.0));
+                                        *x = x.round();
+                                    }
+                                    VariableValue::Float(ref mut x) => {
+                                        ui.add(egui::DragValue::new(x).speed(0.1));
+                                    }
+                                    VariableValue::Boolean(ref mut x) => {
+                                        ui.checkbox(x, "".to_string());
+                                    }
+                                }
+
+                                if variable.removable {
+                                    if ui.button("x").clicked() {
+                                        to_remove = Some(index);
+                                    }
+                                }
+                            });
+                        }
+                    });
+                });
+
+            if let Some(index) = to_remove {
+                self.functions[self.current_function].variables_list.remove(index);
+            }
+            if let Some(index) = name_changed.0 {
+                self.functions[self.current_function].variables_list[index].name = uniquify_name(
+                    name_changed.1,
+                    &self.functions[self.current_function].variables_list
+                );
+            }
+        });
+
+        if let Some(create_function) = &mut self.new_function_window {
+            let mut is_new_function_window = true;
+            let mut is_new_function_created = false;
+            egui::Window
+                ::new("Create Function")
+                .open(&mut is_new_function_window)
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    ui.set_height(460.0);
+                    ui.set_width(660.0);
+                    ui.allocate_space(egui::vec2(0.0, 5.0));
+
+                    ui.label("Function Name :");
+                    ui.text_edit_singleline(&mut create_function.name);
+                    create_function.name = uniquify_name(
+                        create_function.name.clone(),
+                        &self.functions
+                    );
+
+                    ui.separator();
+
+                    use egui_extras::{ Column, TableBuilder };
+
+                    let text_height = egui::TextStyle::Body.resolve(ui.style()).size + 5.0;
+
+                    let input_len = create_function.input.len();
+                    let output_len = create_function.output.len();
+
+                    let sup_len = if input_len < output_len { output_len } else { input_len };
+
+                    let mut to_remove = (None, 0);
+
+                    let table = TableBuilder::new(ui)
+                        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+                        .column(Column::remainder())
+                        .column(Column::remainder())
+                        .min_scrolled_height(0.0);
+
+                    table
+                        .header(20.0, |mut header| {
+                            header.col(|ui| {
+                                ui.vertical_centered(|ui| {
+                                    ui.strong("Input");
+                                });
+                            });
+                            header.col(|ui| {
+                                ui.vertical_centered(|ui| {
+                                    ui.strong("Output");
+                                });
+                            });
+                        })
+                        .body(|body| {
+                            body.rows(text_height, sup_len + 2, |row_index, mut row| {
+                                row.col(|ui| {
+                                    if input_len > row_index {
+                                        let rep = show_functionio(
+                                            row_index,
+                                            &mut create_function.input[row_index],
+                                            ui,
+                                            "i"
+                                        );
+                                        if let Some(function_name) = rep.0 {
+                                            create_function.input[row_index].name = uniquify_name(
+                                                function_name,
+                                                &create_function.input
+                                            );
+                                        };
+                                        if rep.1 == true {
+                                            to_remove = (Some(true), row_index);
+                                        }
+                                    } else if input_len + 1 == row_index {
+                                        ui.vertical_centered(|ui| {
+                                            if ui.button("+ Add Input").clicked() {
+                                                create_function.input.push(FunctionIO {
+                                                    name: uniquify_name(
+                                                        "new".to_string(),
+                                                        &create_function.input
+                                                    ),
+                                                    value: VariableValue::Boolean(true),
+                                                });
+                                            }
+                                        });
+                                    }
+                                });
+                                row.col(|ui| {
+                                    if output_len > row_index {
+                                        let rep = show_functionio(
+                                            row_index,
+                                            &mut create_function.output[row_index],
+                                            ui,
+                                            "o"
+                                        );
+                                        if let Some(function_name) = rep.0 {
+                                            create_function.output[row_index].name = uniquify_name(
+                                                function_name,
+                                                &create_function.output
+                                            );
+                                        };
+                                        if rep.1 == true {
+                                            to_remove = (Some(false), row_index);
+                                        }
+                                    } else if output_len + 1 == row_index {
+                                        ui.vertical_centered(|ui| {
+                                            if ui.button("+ Add Output").clicked() {
+                                                create_function.output.push(FunctionIO {
+                                                    name: uniquify_name(
+                                                        "new".to_string(),
+                                                        &create_function.output
+                                                    ),
+                                                    value: VariableValue::Boolean(true),
+                                                });
+                                            }
+                                        });
+                                    }
+                                });
+                            });
+                        });
+
+                        if let Some(side) = to_remove.0 {
+                            if side {
+                                create_function.input.remove(to_remove.1);
+                            } else {
+                                create_function.output.remove(to_remove.1);
+                            }
+                        }
+
+                    ui.allocate_space(egui::vec2(0.0, 5.0));
+                    ui.vertical_centered(|ui| {
+                        if ui.button("Create").clicked() {
+                            self.functions.push(GraphFunction {
+                                graph: NodeGraphExample::default(),
+                                name: std::mem::replace(&mut create_function.name, "".to_string()),
+                                removable: true,
+                                modifiable_name: true,
+                                variables_list: vec![],
+                                input: std::mem::replace(&mut create_function.input, vec![]),
+                                output: std::mem::replace(&mut create_function.output, vec![]),
+                            });
+                            is_new_function_created = true;
+                        }
+                    });
+                });
+            if !is_new_function_window || is_new_function_created {
+                self.new_function_window = None;
+            }
+        }
+    }
+}
+
+impl NodeGraphExample {
     #[cfg(feature = "persistence")]
     /// If the persistence function is enabled,
     /// Called by the frame work to save state before shutdown.
@@ -424,39 +1049,45 @@ impl eframe::App for NodeGraphExample {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::top("top").show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
-                egui::widgets::global_dark_light_mode_switch(ui);
-            });
-        });
-        let graph_response = egui::CentralPanel::default()
+        let graph_response = egui::CentralPanel
+            ::default()
             .show(ctx, |ui| {
                 self.state.draw_graph_editor(
                     ui,
                     AllMyNodeTemplates,
                     &mut self.user_state,
-                    Vec::default(),
+                    Vec::default()
                 )
-            })
-            .inner;
+            }).inner;
         for node_response in graph_response.node_responses {
             // Here, we ignore all other graph events. But you may find
             // some use for them. For example, by playing a sound when a new
             // connection is created
             if let NodeResponse::User(user_event) = node_response {
                 match user_event {
-                    MyResponse::SetActiveNode(node) => self.user_state.active_node = Some(node),
-                    MyResponse::ClearActiveNode => self.user_state.active_node = None,
+                    MyResponse::SetActiveNode(node) => {
+                        self.user_state.active_node = Some(node);
+                    }
+                    MyResponse::ClearActiveNode => {
+                        self.user_state.active_node = None;
+                    }
                 }
             }
-            if let NodeResponse::ConnectEventEnded { output, input, node_input: _, node_output: _ } = node_response {
-                
-
+            if
+                let NodeResponse::ConnectEventEnded {
+                    output,
+                    input,
+                    node_input: _,
+                    node_output: _,
+                } = node_response
+            {
                 // Check if the output can be send to differents inputs
-                if let Some(out) =  self.state.graph.outputs.get(output) {
+                if let Some(out) = self.state.graph.outputs.get(output) {
                     if out.typ == MyDataType::Scalar {
                         // Remove all the others connections with the same input.
-                        self.state.graph.connections.retain(|inp, out| !(inp != input && *out == output));
+                        self.state.graph.connections.retain(
+                            |inp, out| !(inp != input && *out == output)
+                        );
                     }
                 }
             }
@@ -473,7 +1104,7 @@ impl eframe::App for NodeGraphExample {
                     egui::Align2::LEFT_TOP,
                     text,
                     TextStyle::Button.resolve(&ctx.style()),
-                    egui::Color32::WHITE,
+                    egui::Color32::WHITE
                 );
             } else {
                 self.user_state.active_node = None;
@@ -488,7 +1119,7 @@ type OutputsCache = HashMap<OutputId, MyValueType>;
 pub fn evaluate_node(
     graph: &MyGraph,
     node_id: NodeId,
-    outputs_cache: &mut OutputsCache,
+    outputs_cache: &mut OutputsCache
 ) -> anyhow::Result<MyValueType> {
     // To solve a similar problem as creating node types above, we define an
     // Evaluator as a convenience. It may be overkill for this small example,
@@ -516,7 +1147,7 @@ pub fn evaluate_node(
         fn populate_output(
             &mut self,
             name: &str,
-            value: MyValueType,
+            value: MyValueType
         ) -> anyhow::Result<MyValueType> {
             // After computing an output, we don't just return it, but we also
             // populate the outputs cache with it. This ensures the evaluation
@@ -550,20 +1181,14 @@ pub fn evaluate_node(
     let node = &graph[node_id];
     let mut evaluator = Evaluator::new(graph, outputs_cache, node_id);
 
-
-
-    
     println!("\n\n\n{:?}", graph[node_id]);
     println!("{:?}", graph[node_id].get_input("B"));
     if let Ok(t) = evaluator.evaluate_input("B") {
         println!("{:?}", t);
     } else {
-        println!("NO B")
+        println!("NO B");
     }
     println!("{:?}", graph.connections);
-
-
-
 
     match node.user_data.template {
         MyNodeTemplate::AddScalar => {
@@ -608,7 +1233,7 @@ fn populate_output(
     outputs_cache: &mut OutputsCache,
     node_id: NodeId,
     param_name: &str,
-    value: MyValueType,
+    value: MyValueType
 ) -> anyhow::Result<MyValueType> {
     let output_id = graph[node_id].get_output(param_name)?;
     outputs_cache.insert(output_id, value);
@@ -620,7 +1245,7 @@ fn evaluate_input(
     graph: &MyGraph,
     node_id: NodeId,
     param_name: &str,
-    outputs_cache: &mut OutputsCache,
+    outputs_cache: &mut OutputsCache
 ) -> anyhow::Result<MyValueType> {
     let input_id = graph[node_id].get_input(param_name)?;
 
@@ -630,21 +1255,17 @@ fn evaluate_input(
         // node. We simply return value from the cache.
         if let Some(other_value) = outputs_cache.get(&other_output_id) {
             Ok(*other_value)
-        }
-        // This is the first time encountering this node, so we need to
-        // recursively evaluate it.
-        else {
+        } else {
+            // This is the first time encountering this node, so we need to
+            // recursively evaluate it.
             // Calling this will populate the cache
             evaluate_node(graph, graph[other_output_id].node, outputs_cache)?;
 
             // Now that we know the value is cached, return it
-            Ok(*outputs_cache
-                .get(&other_output_id)
-                .expect("Cache should be populated"))
+            Ok(*outputs_cache.get(&other_output_id).expect("Cache should be populated"))
         }
-    }
-    // No existing connection, take the inline value instead.
-    else {
+    } else {
+        // No existing connection, take the inline value instead.
         Ok(graph[input_id].value)
     }
 }

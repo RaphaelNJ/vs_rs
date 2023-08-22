@@ -2,7 +2,7 @@
 #![cfg_attr(not(debug_assertions), deny(warnings))] // Forbid warnings in release builds
 #![warn(clippy::all, rust_2018_idioms)]
 
-use egui_node_graph_example::NodeGraphExample;
+use egui_node_graph_example;
 
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
@@ -16,10 +16,10 @@ fn main() {
             cc.egui_ctx.set_visuals(Visuals::dark());
             #[cfg(feature = "persistence")]
             {
-                Box::new(NodeGraphExample::new(cc))
+                Box::<egui_node_graph_example::App>::default()
             }
             #[cfg(not(feature = "persistence"))]
-            Box::<NodeGraphExample>::default()
+            Box::<egui_node_graph_example::App>::default()
         }),
     )
     .expect("Failed to run native example");
