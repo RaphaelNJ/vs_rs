@@ -3,6 +3,10 @@
 #![warn(clippy::all, rust_2018_idioms)]
 
 use egui_node_graph_example;
+mod functions;
+mod variables;
+mod app;
+mod utils;
 
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]

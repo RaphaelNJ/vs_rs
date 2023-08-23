@@ -10,6 +10,10 @@ use std::fs::{ File, OpenOptions };
 use std::io::{ Read, Write };
 use bincode;
 
+use crate::functions;
+use crate::utils;
+use crate::variables;
+
 #[cfg(feature = "persistence")]
 use serde::{ Deserialize, Serialize };
 
@@ -515,57 +519,6 @@ pub enum VariableValue {
     Boolean(bool),
 }
 
-fn show_functionio(
-    row_index: usize,
-    function_oi: &mut FunctionIO,
-    ui: &mut egui::Ui,
-    id: &str
-) -> (Option<String>, bool) {
-    let default_variable_values = [
-        (VariableValue::String("".to_owned()), "String"),
-        (VariableValue::Integer(0.0), "Integer"),
-        (VariableValue::Float(0.0), "Float"),
-        (VariableValue::Boolean(true), "Boolean"),
-    ];
-
-    let mut changed = (None, false);
-
-    let mut function_name = function_oi.name.to_string();
-
-    if ui.add(TextEdit::singleline(&mut function_name).desired_width(133.0)).changed() {
-        changed.0 = Some(function_name);
-    }
-
-    egui::ComboBox
-        ::from_id_source(format!("{}{id}", row_index))
-        .selected_text(function_oi.value.to_string())
-        .width(74.0)
-        .show_ui(ui, |ui| {
-            for (value, name) in &default_variable_values {
-                ui.selectable_value(&mut function_oi.value, value.clone(), name.to_string());
-            }
-        });
-    match function_oi.value {
-        VariableValue::String(ref mut x) => {
-            ui.add(TextEdit::singleline(x).desired_width(100.0));
-        }
-        VariableValue::Integer(ref mut x) => {
-            ui.add(egui::DragValue::new(x).speed(1.0));
-            *x = x.round();
-        }
-        VariableValue::Float(ref mut x) => {
-            ui.add(egui::DragValue::new(x).speed(0.1));
-        }
-        VariableValue::Boolean(ref mut x) => {
-            ui.checkbox(x, "".to_string());
-        }
-    }
-    if ui.button("x").clicked() {
-        changed.1 = true;
-    }
-    changed
-}
-
 impl fmt::Display for VariableValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -615,52 +568,19 @@ impl Default for App {
     }
 }
 
-trait GetName {
-    fn get_name(&self) -> String;
-}
-
-fn uniquify_name(input_name: String, vec: &Vec<impl GetName>) -> String {
-    let mut times = 0;
-    let name = input_name.replace(" ", "_");
-    loop {
-        let x = 'x: {
-            for obj in vec.iter() {
-                if times == 0 {
-                    if obj.get_name() == name {
-                        times += 1;
-                        break 'x true;
-                    }
-                } else {
-                    if format!("{}_{}", name, times) == obj.get_name() {
-                        times += 1;
-                        break 'x true;
-                    }
-                }
-            }
-            false
-        };
-        if !x {
-            if times == 0 {
-                return name;
-            }
-            return format!("{}_{}", name, times);
-        }
-    }
-}
-
-impl GetName for GraphFunction {
+impl utils::GetName for GraphFunction {
     fn get_name(&self) -> String {
         self.name.clone()
     }
 }
 
-impl GetName for FunctionIO {
+impl utils::GetName for FunctionIO {
     fn get_name(&self) -> String {
         self.name.clone()
     }
 }
 
-impl GetName for Variable {
+impl utils::GetName for Variable {
     fn get_name(&self) -> String {
         self.name.clone()
     }
@@ -704,338 +624,19 @@ impl eframe::App for App {
                     }
                 }
             }
+            if let Some(create_function) = &mut self.new_function_window {
+                if !functions::show_function_window(ctx, create_function, &mut self.functions) {
+                    self.new_function_window = None;
+                }
+            }
         });
 
         // Render The functions tab
-        egui::SidePanel::left("funcs").show(ctx, |ui| {
-            ui.set_min_width(190.0);
-            ui.set_max_width(190.0);
-
-            egui::TopBottomPanel::top("add_func").show_inside(ui, |ui| {
-                ui.vertical_centered(|ui| {
-                    if ui.button("+ Add Function").clicked() {
-                        self.new_function_window = Some(CreateFunctionDialog::default());
-                    }
-                });
-            });
-
-            let mut to_remove = None;
-            let mut to_modify = (None, String::new());
-            let mut change_current_function = None;
-
-            ScrollArea::vertical()
-                .auto_shrink([false; 2])
-                .min_scrolled_height(64.0)
-                .show(ui, |ui| {
-                    ui.vertical(|ui| {
-                        for (index, function) in self.functions.iter().enumerate() {
-                            ui.horizontal(|ui| {
-                                let mut function_name = function.name.to_string();
-
-                                if
-                                    ui
-                                        .selectable_label(self.current_function == index, "↪")
-                                        .clicked()
-                                {
-                                    change_current_function = Some(index);
-                                }
-                                if function.modifiable_name {
-                                    if
-                                        ui
-                                            .add(
-                                                TextEdit::singleline(
-                                                    &mut function_name
-                                                ).desired_width(133.0)
-                                            )
-                                            .changed()
-                                    {
-                                        to_modify.1 = function_name;
-                                        to_modify.0 = Some(index);
-                                    }
-                                } else {
-                                    ui.label(function_name);
-                                }
-                                if function.removable {
-                                    if ui.button("x").clicked() {
-                                        to_remove = Some(index);
-                                    }
-                                }
-                            });
-                        }
-                    });
-                });
-
-            if let Some(index) = to_modify.0 {
-                self.functions[index].name = uniquify_name(to_modify.1, &self.functions);
-            }
-
-            if let Some(index) = to_remove {
-                self.functions.remove(index);
-                self.current_function = 0;
-            }
-            if let Some(index) = change_current_function {
-                self.functions[self.current_function].graph = std::mem::replace(
-                    &mut self.graph,
-                    std::mem::replace(&mut self.functions[index].graph, NodeGraphExample::default())
-                );
-                self.current_function = index;
-            }
-        });
+        functions::render_functions_tab(ctx, self);
 
         // Render The variables tab
-        egui::SidePanel::right("vars").show(ctx, |ui| {
-            ui.set_min_width(345.0);
-            ui.set_max_width(345.0);
+        variables::render_variables_tab(ctx, self);
 
-            egui::TopBottomPanel::top("add_var").show_inside(ui, |ui| {
-                ui.vertical_centered(|ui| {
-                    if ui.button("+ Add Variable").clicked() {
-                        let new_variable = Variable {
-                            name: uniquify_name(
-                                "new".to_string(),
-                                &self.functions[self.current_function].variables_list
-                            ),
-                            value: VariableValue::Boolean(true),
-                            removable: true,
-                        };
-                        self.functions[self.current_function].variables_list.push(new_variable);
-                    }
-                });
-            });
-
-            let mut to_remove = None;
-            let mut name_changed = (None, String::new());
-
-            ScrollArea::vertical()
-                .auto_shrink([false; 2])
-                .min_scrolled_height(64.0)
-                .show(ui, |ui| {
-                    ui.vertical(|ui| {
-                        for (index, variable) in self.functions[
-                            self.current_function
-                        ].variables_list
-                            .iter_mut()
-                            .enumerate() {
-                            ui.horizontal(|ui| {
-                                let mut variable_name = variable.name.to_string();
-                                if
-                                    ui
-                                        .add(
-                                            TextEdit::singleline(&mut variable_name).desired_width(
-                                                133.0
-                                            )
-                                        )
-                                        .changed()
-                                {
-                                    name_changed.0 = Some(index);
-                                    name_changed.1 = variable_name;
-                                }
-
-                                let default_variable_values = [
-                                    (VariableValue::String("".to_owned()), "String"),
-                                    (VariableValue::Integer(0.0), "Integer"),
-                                    (VariableValue::Float(0.0), "Float"),
-                                    (VariableValue::Boolean(true), "Boolean"),
-                                ];
-
-                                egui::ComboBox
-                                    ::from_id_source(index)
-                                    .selected_text(variable.value.to_string())
-                                    .width(74.0)
-                                    .show_ui(ui, |ui| {
-                                        for (value, name) in &default_variable_values {
-                                            ui.selectable_value(
-                                                &mut variable.value,
-                                                value.clone(),
-                                                name.to_string()
-                                            );
-                                        }
-                                    });
-
-                                match variable.value {
-                                    VariableValue::String(ref mut x) => {
-                                        ui.add(TextEdit::singleline(x).desired_width(100.0));
-                                    }
-                                    VariableValue::Integer(ref mut x) => {
-                                        ui.add(egui::DragValue::new(x).speed(1.0));
-                                        *x = x.round();
-                                    }
-                                    VariableValue::Float(ref mut x) => {
-                                        ui.add(egui::DragValue::new(x).speed(0.1));
-                                    }
-                                    VariableValue::Boolean(ref mut x) => {
-                                        ui.checkbox(x, "".to_string());
-                                    }
-                                }
-
-                                if variable.removable {
-                                    if ui.button("x").clicked() {
-                                        to_remove = Some(index);
-                                    }
-                                }
-                            });
-                        }
-                    });
-                });
-
-            if let Some(index) = to_remove {
-                self.functions[self.current_function].variables_list.remove(index);
-            }
-            if let Some(index) = name_changed.0 {
-                self.functions[self.current_function].variables_list[index].name = uniquify_name(
-                    name_changed.1,
-                    &self.functions[self.current_function].variables_list
-                );
-            }
-        });
-
-        if let Some(create_function) = &mut self.new_function_window {
-            let mut is_new_function_window = true;
-            let mut is_new_function_created = false;
-            egui::Window
-                ::new("Create Function")
-                .open(&mut is_new_function_window)
-                .collapsible(false)
-                .resizable(false)
-                .show(ctx, |ui| {
-                    ui.set_height(460.0);
-                    ui.set_width(660.0);
-                    ui.allocate_space(egui::vec2(0.0, 5.0));
-
-                    ui.label("Function Name :");
-                    ui.text_edit_singleline(&mut create_function.name);
-                    create_function.name = uniquify_name(
-                        create_function.name.clone(),
-                        &self.functions
-                    );
-
-                    ui.separator();
-
-                    use egui_extras::{ Column, TableBuilder };
-
-                    let text_height = egui::TextStyle::Body.resolve(ui.style()).size + 5.0;
-
-                    let input_len = create_function.input.len();
-                    let output_len = create_function.output.len();
-
-                    let sup_len = if input_len < output_len { output_len } else { input_len };
-
-                    let mut to_remove = (None, 0);
-
-                    let table = TableBuilder::new(ui)
-                        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-                        .column(Column::remainder())
-                        .column(Column::remainder())
-                        .min_scrolled_height(0.0);
-
-                    table
-                        .header(20.0, |mut header| {
-                            header.col(|ui| {
-                                ui.vertical_centered(|ui| {
-                                    ui.strong("Input");
-                                });
-                            });
-                            header.col(|ui| {
-                                ui.vertical_centered(|ui| {
-                                    ui.strong("Output");
-                                });
-                            });
-                        })
-                        .body(|body| {
-                            body.rows(text_height, sup_len + 2, |row_index, mut row| {
-                                row.col(|ui| {
-                                    if input_len > row_index {
-                                        let rep = show_functionio(
-                                            row_index,
-                                            &mut create_function.input[row_index],
-                                            ui,
-                                            "i"
-                                        );
-                                        if let Some(function_name) = rep.0 {
-                                            create_function.input[row_index].name = uniquify_name(
-                                                function_name,
-                                                &create_function.input
-                                            );
-                                        };
-                                        if rep.1 == true {
-                                            to_remove = (Some(true), row_index);
-                                        }
-                                    } else if input_len + 1 == row_index {
-                                        ui.vertical_centered(|ui| {
-                                            if ui.button("+ Add Input").clicked() {
-                                                create_function.input.push(FunctionIO {
-                                                    name: uniquify_name(
-                                                        "new".to_string(),
-                                                        &create_function.input
-                                                    ),
-                                                    value: VariableValue::Boolean(true),
-                                                });
-                                            }
-                                        });
-                                    }
-                                });
-                                row.col(|ui| {
-                                    if output_len > row_index {
-                                        let rep = show_functionio(
-                                            row_index,
-                                            &mut create_function.output[row_index],
-                                            ui,
-                                            "o"
-                                        );
-                                        if let Some(function_name) = rep.0 {
-                                            create_function.output[row_index].name = uniquify_name(
-                                                function_name,
-                                                &create_function.output
-                                            );
-                                        };
-                                        if rep.1 == true {
-                                            to_remove = (Some(false), row_index);
-                                        }
-                                    } else if output_len + 1 == row_index {
-                                        ui.vertical_centered(|ui| {
-                                            if ui.button("+ Add Output").clicked() {
-                                                create_function.output.push(FunctionIO {
-                                                    name: uniquify_name(
-                                                        "new".to_string(),
-                                                        &create_function.output
-                                                    ),
-                                                    value: VariableValue::Boolean(true),
-                                                });
-                                            }
-                                        });
-                                    }
-                                });
-                            });
-                        });
-
-                        if let Some(side) = to_remove.0 {
-                            if side {
-                                create_function.input.remove(to_remove.1);
-                            } else {
-                                create_function.output.remove(to_remove.1);
-                            }
-                        }
-
-                    ui.allocate_space(egui::vec2(0.0, 5.0));
-                    ui.vertical_centered(|ui| {
-                        if ui.button("Create").clicked() {
-                            self.functions.push(GraphFunction {
-                                graph: NodeGraphExample::default(),
-                                name: std::mem::replace(&mut create_function.name, "".to_string()),
-                                removable: true,
-                                modifiable_name: true,
-                                variables_list: vec![],
-                                input: std::mem::replace(&mut create_function.input, vec![]),
-                                output: std::mem::replace(&mut create_function.output, vec![]),
-                            });
-                            is_new_function_created = true;
-                        }
-                    });
-                });
-            if !is_new_function_window || is_new_function_created {
-                self.new_function_window = None;
-            }
-        }
     }
 }
 

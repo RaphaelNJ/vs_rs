@@ -3,6 +3,9 @@
 #![warn(clippy::all, rust_2018_idioms)]
 
 mod app;
+mod functions;
+mod variables;
+mod utils;
 pub use app::App;
 
 // ----------------------------------------------------------------------------
