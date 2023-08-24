@@ -226,13 +226,13 @@ pub fn render_functions_tab(ctx: &egui::Context, app: &mut app::App) {
             .min_scrolled_height(64.0)
             .show(ui, |ui| {
                 ui.vertical(|ui| {
-                    for (index, function) in app.functions.iter().enumerate() {
+                    for (index, function) in app.app_state.functions.iter().enumerate() {
                         ui.horizontal(|ui| {
                             let mut function_name = function.name.to_string();
 
                             if
                                 ui
-                                    .selectable_label(app.current_function == index, "↪")
+                                    .selectable_label(app.app_state.current_function == index, "↪")
                                     .clicked()
                             {
                                 change_current_function = Some(index);
@@ -264,19 +264,19 @@ pub fn render_functions_tab(ctx: &egui::Context, app: &mut app::App) {
             });
 
         if let Some(index) = to_modify.0 {
-            app.functions[index].name = utils::uniquify_name(to_modify.1, &app.functions);
+            app.app_state.functions[index].name = utils::uniquify_name(to_modify.1, &app.app_state.functions);
         }
 
         if let Some(index) = to_remove {
-            app.functions.remove(index);
-            app.current_function = 0;
+            app.app_state.functions.remove(index);
+            app.app_state.current_function = 0;
         }
         if let Some(index) = change_current_function {
-            app.functions[app.current_function].graph = std::mem::replace(
-                &mut app.graph,
-                std::mem::replace(&mut app.functions[index].graph, app::NodeGraphExample::default())
+            app.app_state.functions[app.app_state.current_function].graph = std::mem::replace(
+                &mut app.app_state.graph,
+                std::mem::replace(&mut app.app_state.functions[index].graph, app::NodeGraphExample::default())
             );
-            app.current_function = index;
+            app.app_state.current_function = index;
         }
     });
 }

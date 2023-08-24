@@ -447,7 +447,7 @@ impl NodeGraphExample {
 }
 
 #[cfg(feature = "persistence")]
-impl NodeGraphExample {
+impl AppState {
     // Save the struct to the specified location using bincode
     pub fn save_to_file(&self, file_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         let mut file = OpenOptions::new().write(true).create(true).truncate(true).open(file_path)?;
@@ -470,18 +470,24 @@ impl NodeGraphExample {
     }
 
     pub fn load(&mut self, file_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-        *self = NodeGraphExample::load_from_file(file_path)?;
+        *self = AppState::load_from_file(file_path)?;
         Ok(())
     }
 }
 
 pub struct App {
-    pub graph: NodeGraphExample,
     pub save_load_actions: Option<PathBuf>,
     pub open_file_dialog: Option<(FileDialog, SaveOrLoad)>,
-    pub functions: Vec<GraphFunction>,
-    pub current_function: usize,
     pub new_function_window: Option<CreateFunctionDialog>,
+    pub app_state : AppState
+}
+
+
+#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
+pub struct AppState {
+    pub current_function: usize,
+    pub functions: Vec<GraphFunction>,
+    pub graph: NodeGraphExample,
 }
 
 pub struct CreateFunctionDialog {
@@ -490,6 +496,7 @@ pub struct CreateFunctionDialog {
     pub output: Vec<FunctionIO>,
 }
 
+#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
 pub struct GraphFunction {
     pub graph: NodeGraphExample,
     pub name: String,
@@ -500,11 +507,13 @@ pub struct GraphFunction {
     pub output: Vec<FunctionIO>,
 }
 
+#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
 pub struct FunctionIO {
     pub name: String,
     pub value: VariableValue,
 }
 
+#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
 pub struct Variable {
     pub name: String,
     pub value: VariableValue,
@@ -512,6 +521,7 @@ pub struct Variable {
 }
 
 #[derive(PartialEq, Clone, Debug)]
+#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
 pub enum VariableValue {
     String(String),
     Integer(f64),
@@ -539,31 +549,33 @@ impl Default for CreateFunctionDialog {
 impl Default for App {
     fn default() -> Self {
         Self {
-            graph: NodeGraphExample::default(),
             save_load_actions: None,
             open_file_dialog: None,
-            functions: vec![GraphFunction {
-                graph: NodeGraphExample::default(),
-                name: "Main".to_owned(),
-                removable: false,
-                modifiable_name: false,
-                variables_list: vec![
-                    Variable {
-                        name: "Hello".to_string(),
-                        value: VariableValue::String("World !".to_string()),
-                        removable: true,
-                    },
-                    Variable {
-                        name: "Hello_World".to_string(),
-                        value: VariableValue::Boolean(true),
-                        removable: true,
-                    }
-                ],
-                input: vec![],
-                output: vec![],
-            }],
-            current_function: 0,
             new_function_window: None,
+            app_state : AppState {
+                current_function: 0,
+                functions: vec![GraphFunction {
+                    graph: NodeGraphExample::default(),
+                    name: "Main".to_owned(),
+                    removable: false,
+                    modifiable_name: false,
+                    variables_list: vec![
+                        Variable {
+                            name: "Hello".to_string(),
+                            value: VariableValue::String("World !".to_string()),
+                            removable: true,
+                        },
+                        Variable {
+                            name: "Hello_World".to_string(),
+                            value: VariableValue::Boolean(true),
+                            removable: true,
+                        }
+                    ],
+                    input: vec![],
+                    output: vec![],
+                }],
+                graph: NodeGraphExample::default(),
+            }
         }
     }
 }
@@ -588,7 +600,7 @@ impl utils::GetName for Variable {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        self.graph.update(ctx, frame);
+        self.app_state.graph.update(ctx, frame);
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 egui::widgets::global_dark_light_mode_switch(ui);
@@ -613,11 +625,11 @@ impl eframe::App for App {
                         self.save_load_actions = Some(file.to_path_buf());
                         match dialog.1 {
                             SaveOrLoad::Load => {
-                                self.graph.load(&file.to_path_buf());
+                                self.app_state.load(&file.to_path_buf());
                                 println!("Load : {:?}", file.to_path_buf());
                             }
                             SaveOrLoad::Save => {
-                                self.graph.save_to_file(&file.to_path_buf());
+                                self.app_state.save_to_file(&file.to_path_buf());
                                 println!("Save : {:?}", file.to_path_buf());
                             }
                         }
@@ -625,7 +637,7 @@ impl eframe::App for App {
                 }
             }
             if let Some(create_function) = &mut self.new_function_window {
-                if !functions::show_function_window(ctx, create_function, &mut self.functions) {
+                if !functions::show_function_window(ctx, create_function, &mut self.app_state.functions) {
                     self.new_function_window = None;
                 }
             }

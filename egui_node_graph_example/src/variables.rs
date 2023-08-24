@@ -16,12 +16,12 @@ pub fn render_variables_tab(ctx: &egui::Context, app: &mut app::App) {
                         let new_variable = app::Variable {
                             name: utils::uniquify_name(
                                 "new".to_string(),
-                                &app.functions[app.current_function].variables_list
+                                &app.app_state.functions[app.app_state.current_function].variables_list
                             ),
                             value: app::VariableValue::Boolean(true),
                             removable: true,
                         };
-                        app.functions[app.current_function].variables_list.push(new_variable);
+                        app.app_state.functions[app.app_state.current_function].variables_list.push(new_variable);
                     }
                 });
             });
@@ -34,8 +34,8 @@ pub fn render_variables_tab(ctx: &egui::Context, app: &mut app::App) {
                 .min_scrolled_height(64.0)
                 .show(ui, |ui| {
                     ui.vertical(|ui| {
-                        for (index, variable) in app.functions[
-                            app.current_function
+                        for (index, variable) in app.app_state.functions[
+                            app.app_state.current_function
                         ].variables_list
                             .iter_mut()
                             .enumerate() {
@@ -102,13 +102,13 @@ pub fn render_variables_tab(ctx: &egui::Context, app: &mut app::App) {
                 });
 
             if let Some(index) = to_remove {
-                app.functions[app.current_function].variables_list.remove(index);
+                app.app_state.functions[app.app_state.current_function].variables_list.remove(index);
             }
             if let Some(index) = name_changed.0 {
-                app.functions[app.current_function].variables_list[index].name =
+                app.app_state.functions[app.app_state.current_function].variables_list[index].name =
                     utils::uniquify_name(
                         name_changed.1,
-                        &app.functions[app.current_function].variables_list
+                        &app.app_state.functions[app.app_state.current_function].variables_list
                     );
             }
         });
