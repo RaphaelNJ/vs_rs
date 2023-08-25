@@ -10,6 +10,13 @@ impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
         }
     }
 
+    pub fn rename_node(&mut self, node_id: NodeId, label: String) -> Result<(), EguiGraphError> {
+        self.nodes.get_mut(node_id).map_or(Err(EguiGraphError::InvalidNodeId(node_id)), |x| {
+            x.label = label;
+            Ok(())
+        })
+    }
+
     pub fn add_node(
         &mut self,
         label: String,
@@ -85,6 +92,20 @@ impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
     /// ids in the pair (the one on `node_id`'s end) will be invalid after
     /// calling this function.
     pub fn remove_node(&mut self, node_id: NodeId) -> (Node<NodeData>, Vec<(InputId, OutputId)>) {
+        
+        let disconnect_events = self.remove_all_nodes_connections(node_id);
+        
+        let removed_node = self.nodes.remove(node_id).expect("Node should exist");
+
+        (removed_node, disconnect_events)
+    }
+
+    /// Removes any incoming or outgoing connections from the selected node.
+    ///
+    /// This function returns the list of connections that has been removed.
+    /// Note that one of the two ids in the pair (the one on `node_id`'s end)
+    /// will be invalid after calling this function.
+    pub fn remove_all_nodes_connections(&mut self, node_id: NodeId) -> Vec<(InputId, OutputId)> {
         let mut disconnect_events = vec![];
 
         self.connections.retain(|i, o| {
@@ -104,9 +125,7 @@ impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
         for output in self[node_id].output_ids().collect::<SVec<_>>() {
             self.outputs.remove(output);
         }
-        let removed_node = self.nodes.remove(node_id).expect("Node should exist");
-
-        (removed_node, disconnect_events)
+        disconnect_events
     }
 
     pub fn remove_connection(&mut self, input_id: InputId) -> Option<OutputId> {
