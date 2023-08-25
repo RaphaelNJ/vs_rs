@@ -87,7 +87,7 @@ impl MyValueType {
 /// NodeTemplate is a mechanism to define node templates. It's what the graph
 /// will display in the "new node" popup. The user code needs to tell the
 /// library how to convert a NodeTemplate into a Node.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum MyNodeTemplate {
     MakeScalar,
@@ -97,6 +97,7 @@ pub enum MyNodeTemplate {
     AddVector,
     SubtractVector,
     VectorTimesScalar,
+    Function(Option<usize>),
 }
 
 /// The response type is used to encode side-effects produced when drawing a
@@ -107,6 +108,7 @@ pub enum MyNodeTemplate {
 pub enum MyResponse {
     SetActiveNode(NodeId),
     ClearActiveNode,
+    AsignFunction(NodeId, usize),
 }
 
 /// The graph 'global' state. This state struct is passed around to the node and
@@ -116,6 +118,7 @@ pub enum MyResponse {
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct MyGraphState {
     pub active_node: Option<NodeId>,
+    pub functions: Vec<GraphFunction>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -168,6 +171,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
             MyNodeTemplate::AddVector => "Vector add",
             MyNodeTemplate::SubtractVector => "Vector subtract",
             MyNodeTemplate::VectorTimesScalar => "Vector times scalar",
+            MyNodeTemplate::Function(_) => "Function",
         })
     }
 
@@ -181,6 +185,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
             | MyNodeTemplate::AddVector
             | MyNodeTemplate::SubtractVector => vec!["Vector"],
             MyNodeTemplate::VectorTimesScalar => vec!["Vector", "Scalar"],
+            MyNodeTemplate::Function(_) => vec!["Function"],
         }
     }
 
@@ -197,7 +202,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
     fn build_node(
         &self,
         graph: &mut Graph<Self::NodeData, Self::DataType, Self::ValueType>,
-        _user_state: &mut Self::UserState,
+        user_state: &mut Self::UserState,
         node_id: NodeId
     ) {
         // The nodes are created empty by default. This function needs to take
@@ -286,6 +291,16 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 input_scalar(graph, "value");
                 output_scalar(graph, "out");
             }
+            MyNodeTemplate::Function(x) => {
+                if let Some(function_index) = x {
+                    for input in user_state.functions[*function_index].input.iter() {
+                        input_scalar(graph, &input.name);
+                    }
+                    for output in user_state.functions[*function_index].output.iter() {
+                        output_scalar(graph, &output.name);
+                    }
+                }
+            }
         }
     }
 }
@@ -305,7 +320,8 @@ impl NodeTemplateIter for AllMyNodeTemplates {
             MyNodeTemplate::SubtractScalar,
             MyNodeTemplate::AddVector,
             MyNodeTemplate::SubtractVector,
-            MyNodeTemplate::VectorTimesScalar
+            MyNodeTemplate::VectorTimesScalar,
+            MyNodeTemplate::Function(None)
         ]
     }
 }
@@ -375,7 +391,7 @@ impl NodeDataTrait for MyNodeData {
         &self,
         ui: &mut egui::Ui,
         node_id: NodeId,
-        _graph: &Graph<MyNodeData, MyDataType, MyValueType>,
+        graph: &Graph<MyNodeData, MyDataType, MyValueType>,
         user_state: &mut Self::UserState
     ) -> Vec<NodeResponse<MyResponse, MyNodeData>>
         where MyResponse: UserResponseTrait
@@ -402,6 +418,30 @@ impl NodeDataTrait for MyNodeData {
                 .fill(egui::Color32::GOLD);
             if ui.add(button).clicked() {
                 responses.push(NodeResponse::User(MyResponse::ClearActiveNode));
+            }
+        }
+
+        if let MyNodeTemplate::Function(mut current_value) = graph[node_id].user_data.template {
+            let value = current_value.clone();
+
+            egui::ComboBox
+                ::from_id_source(node_id)
+                .selected_text(
+                    current_value.map_or("Choose a Function", |x| {
+                        user_state.functions.get(x).map_or("Choose a Function", |y| { &y.name })
+                    })
+                )
+                .width(74.0)
+                .show_ui(ui, |ui| {
+                    for x in user_state.functions.iter().enumerate() {
+                        ui.selectable_value(&mut current_value, Some(x.0), &x.1.name);
+                    }
+                });
+
+            if value != current_value {
+                if let Some(x) = current_value {
+                    responses.push(NodeResponse::User(MyResponse::AsignFunction(node_id, x)));
+                }
             }
         }
 
@@ -479,7 +519,7 @@ pub struct App {
     pub save_load_actions: Option<PathBuf>,
     pub open_file_dialog: Option<(FileDialog, SaveOrLoad)>,
     pub new_function_window: Option<CreateFunctionDialog>,
-    pub app_state : AppState
+    pub app_state: AppState
 }
 
 
@@ -552,7 +592,7 @@ impl Default for App {
             save_load_actions: None,
             open_file_dialog: None,
             new_function_window: None,
-            app_state : AppState {
+            app_state: AppState {
                 current_function: 0,
                 functions: vec![GraphFunction {
                     graph: NodeGraphExample::default(),
@@ -600,7 +640,15 @@ impl utils::GetName for Variable {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        self.app_state.graph.user_state.functions = std::mem::replace(
+            &mut self.app_state.functions,
+            vec![]
+        );
         self.app_state.graph.update(ctx, frame);
+        self.app_state.functions = std::mem::replace(
+            &mut self.app_state.graph.user_state.functions,
+            vec![]
+        );
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 egui::widgets::global_dark_light_mode_switch(ui);
@@ -637,7 +685,13 @@ impl eframe::App for App {
                 }
             }
             if let Some(create_function) = &mut self.new_function_window {
-                if !functions::show_function_window(ctx, create_function, &mut self.app_state.functions) {
+                if
+                    !functions::show_function_window(
+                        ctx,
+                        create_function,
+                        &mut self.app_state.functions
+                    )
+                {
                     self.new_function_window = None;
                 }
             }
@@ -648,7 +702,7 @@ impl eframe::App for App {
 
         // Render The variables tab
         variables::render_variables_tab(ctx, self);
-
+        
     }
 }
 
@@ -683,6 +737,20 @@ impl NodeGraphExample {
                     }
                     MyResponse::ClearActiveNode => {
                         self.user_state.active_node = None;
+                    }
+                    MyResponse::AsignFunction(node, function) => {
+                        self.state.graph.nodes[node].user_data.template = MyNodeTemplate::Function(
+                            Some(function)
+                        );
+                        let _ = self.state.graph.rename_node(
+                            node,
+                            format!("Function {}", self.user_state.functions[function].name)
+                        );
+                        self.state.graph.remove_all_nodes_connections(node);
+                        self.state.graph.nodes[node].inputs.clear();
+                        self.state.graph.nodes[node].outputs.clear();
+                        let template = self.state.graph.nodes[node].user_data.template;
+                        template.build_node(&mut self.state.graph, &mut self.user_state, node);
                     }
                 }
             }
@@ -836,6 +904,10 @@ pub fn evaluate_node(
         }
         MyNodeTemplate::MakeScalar => {
             let value = evaluator.input_scalar("value")?;
+            evaluator.output_scalar("out", value)
+        }
+        MyNodeTemplate::Function(_) => {
+            let value = 0.0;
             evaluator.output_scalar("out", value)
         }
     }
