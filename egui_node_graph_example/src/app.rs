@@ -9,10 +9,13 @@ use std::path::PathBuf;
 use std::fs::{ File, OpenOptions };
 use std::io::{ Read, Write };
 use bincode;
+use slotmap::SlotMap;
 
 use crate::functions;
 use crate::utils;
 use crate::variables;
+
+const DISABLE_RECURSIVE_FUNCTIONS: bool = true;
 
 #[cfg(feature = "persistence")]
 use serde::{ Deserialize, Serialize };
@@ -97,7 +100,7 @@ pub enum MyNodeTemplate {
     AddVector,
     SubtractVector,
     VectorTimesScalar,
-    Function(Option<usize>),
+    Function(Option<functions::FunctionId>),
 }
 
 /// The response type is used to encode side-effects produced when drawing a
@@ -108,7 +111,7 @@ pub enum MyNodeTemplate {
 pub enum MyResponse {
     SetActiveNode(NodeId),
     ClearActiveNode,
-    AsignFunction(NodeId, usize),
+    AsignFunction(NodeId, Option<functions::FunctionId>),
 }
 
 /// The graph 'global' state. This state struct is passed around to the node and
@@ -118,7 +121,9 @@ pub enum MyResponse {
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct MyGraphState {
     pub active_node: Option<NodeId>,
-    pub functions: Vec<GraphFunction>,
+    pub functions: SlotMap<functions::FunctionId, GraphFunction>,
+    pub graph_id: functions::FunctionId,
+    pub main_graph_id: functions::FunctionId,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -423,6 +428,11 @@ impl NodeDataTrait for MyNodeData {
 
         if let MyNodeTemplate::Function(mut current_value) = graph[node_id].user_data.template {
             let value = current_value.clone();
+            if let Some(x) = current_value {
+                if !user_state.functions.contains_key(x) {
+                    current_value = None;
+                }
+            }
 
             egui::ComboBox
                 ::from_id_source(node_id)
@@ -433,15 +443,19 @@ impl NodeDataTrait for MyNodeData {
                 )
                 .width(74.0)
                 .show_ui(ui, |ui| {
-                    for x in user_state.functions.iter().enumerate() {
-                        ui.selectable_value(&mut current_value, Some(x.0), &x.1.name);
+                    for x in user_state.functions.iter() {
+                        if !(DISABLE_RECURSIVE_FUNCTIONS && user_state.graph_id == x.0) {
+                            if user_state.main_graph_id != x.0 {
+                                ui.selectable_value(&mut current_value, Some(x.0), &x.1.name);
+                            }
+                        }
                     }
                 });
 
             if value != current_value {
-                if let Some(x) = current_value {
-                    responses.push(NodeResponse::User(MyResponse::AsignFunction(node_id, x)));
-                }
+                responses.push(
+                    NodeResponse::User(MyResponse::AsignFunction(node_id, current_value))
+                );
             }
         }
 
@@ -463,9 +477,9 @@ type MyEditorState = GraphEditorState<
 pub struct NodeGraphExample {
     // The `GraphEditorState` is the top-level object. You "register" all your
     // custom types by specifying it as its generic parameters.
-    state: MyEditorState,
+    pub state: MyEditorState,
 
-    user_state: MyGraphState,
+    pub user_state: MyGraphState,
 }
 
 #[cfg(feature = "persistence")]
@@ -519,15 +533,15 @@ pub struct App {
     pub save_load_actions: Option<PathBuf>,
     pub open_file_dialog: Option<(FileDialog, SaveOrLoad)>,
     pub new_function_window: Option<CreateFunctionDialog>,
-    pub app_state: AppState
+    pub app_state: AppState,
 }
-
 
 #[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
 pub struct AppState {
-    pub current_function: usize,
-    pub functions: Vec<GraphFunction>,
+    pub current_function: functions::FunctionId,
+    pub functions: SlotMap<functions::FunctionId, GraphFunction>,
     pub graph: NodeGraphExample,
+    pub main_graph_id: functions::FunctionId,
 }
 
 pub struct CreateFunctionDialog {
@@ -588,34 +602,40 @@ impl Default for CreateFunctionDialog {
 
 impl Default for App {
     fn default() -> Self {
+        let mut functions = SlotMap::default();
+        let current_function = functions.insert(GraphFunction {
+            graph: NodeGraphExample::default(),
+            name: "Main".to_owned(),
+            removable: false,
+            modifiable_name: false,
+            variables_list: vec![
+                Variable {
+                    name: "Hello".to_string(),
+                    value: VariableValue::String("World !".to_string()),
+                    removable: true,
+                },
+                Variable {
+                    name: "Hello_World".to_string(),
+                    value: VariableValue::Boolean(true),
+                    removable: true,
+                }
+            ],
+            input: vec![],
+            output: vec![],
+        });
+        let mut graph = NodeGraphExample::default();
+        graph.user_state.graph_id = current_function;
+        graph.user_state.main_graph_id = current_function;
         Self {
             save_load_actions: None,
             open_file_dialog: None,
             new_function_window: None,
             app_state: AppState {
-                current_function: 0,
-                functions: vec![GraphFunction {
-                    graph: NodeGraphExample::default(),
-                    name: "Main".to_owned(),
-                    removable: false,
-                    modifiable_name: false,
-                    variables_list: vec![
-                        Variable {
-                            name: "Hello".to_string(),
-                            value: VariableValue::String("World !".to_string()),
-                            removable: true,
-                        },
-                        Variable {
-                            name: "Hello_World".to_string(),
-                            value: VariableValue::Boolean(true),
-                            removable: true,
-                        }
-                    ],
-                    input: vec![],
-                    output: vec![],
-                }],
-                graph: NodeGraphExample::default(),
-            }
+                main_graph_id: current_function,
+                current_function,
+                functions,
+                graph,
+            },
         }
     }
 }
@@ -642,12 +662,12 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         self.app_state.graph.user_state.functions = std::mem::replace(
             &mut self.app_state.functions,
-            vec![]
+            SlotMap::default()
         );
         self.app_state.graph.update(ctx, frame);
         self.app_state.functions = std::mem::replace(
             &mut self.app_state.graph.user_state.functions,
-            vec![]
+            SlotMap::default()
         );
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
@@ -689,7 +709,8 @@ impl eframe::App for App {
                     !functions::show_function_window(
                         ctx,
                         create_function,
-                        &mut self.app_state.functions
+                        &mut self.app_state.functions,
+                        self.app_state.main_graph_id
                     )
                 {
                     self.new_function_window = None;
@@ -702,7 +723,6 @@ impl eframe::App for App {
 
         // Render The variables tab
         variables::render_variables_tab(ctx, self);
-        
     }
 }
 
@@ -739,12 +759,14 @@ impl NodeGraphExample {
                         self.user_state.active_node = None;
                     }
                     MyResponse::AsignFunction(node, function) => {
-                        self.state.graph.nodes[node].user_data.template = MyNodeTemplate::Function(
-                            Some(function)
-                        );
+                        self.state.graph.nodes[node].user_data.template =
+                            MyNodeTemplate::Function(function);
                         let _ = self.state.graph.rename_node(
                             node,
-                            format!("Function {}", self.user_state.functions[function].name)
+                            format!(
+                                "Function {}",
+                                function.map_or("", |x| { &self.user_state.functions[x].name })
+                            )
                         );
                         self.state.graph.remove_all_nodes_connections(node);
                         self.state.graph.nodes[node].inputs.clear();

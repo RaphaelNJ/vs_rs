@@ -2,8 +2,17 @@ use crate::app;
 use crate::utils;
 
 use eframe::egui;
+use slotmap;
+slotmap::new_key_type! {
+    pub struct FunctionId;
+}
 
-pub fn show_function_window(ctx: &egui::Context, create_function: &mut app::CreateFunctionDialog, functions: &mut Vec<app::GraphFunction>) -> bool {
+pub fn show_function_window(
+    ctx: &egui::Context,
+    create_function: &mut app::CreateFunctionDialog,
+    functions: &mut slotmap::SlotMap<FunctionId, app::GraphFunction>,
+    main_function: FunctionId,
+) -> bool {
     let mut is_new_function_window = true;
     let mut is_new_function_created = false;
     egui::Window
@@ -18,7 +27,10 @@ pub fn show_function_window(ctx: &egui::Context, create_function: &mut app::Crea
 
             ui.label("Function Name :");
             ui.text_edit_singleline(&mut create_function.name);
-            create_function.name = utils::uniquify_name(create_function.name.clone(), &functions);
+            create_function.name = utils::uniquify_name_slot(
+                create_function.name.clone(),
+                functions
+            );
 
             ui.separator();
 
@@ -130,7 +142,7 @@ pub fn show_function_window(ctx: &egui::Context, create_function: &mut app::Crea
             ui.allocate_space(egui::vec2(0.0, 5.0));
             ui.vertical_centered(|ui| {
                 if ui.button("Create").clicked() {
-                    functions.push(app::GraphFunction {
+                    let new_function = functions.insert(app::GraphFunction {
                         graph: app::NodeGraphExample::default(),
                         name: std::mem::replace(&mut create_function.name, "".to_string()),
                         removable: true,
@@ -139,6 +151,8 @@ pub fn show_function_window(ctx: &egui::Context, create_function: &mut app::Crea
                         input: std::mem::replace(&mut create_function.input, vec![]),
                         output: std::mem::replace(&mut create_function.output, vec![]),
                     });
+                    functions[new_function].graph.user_state.graph_id = new_function;
+                    functions[new_function].graph.user_state.main_graph_id = main_function;
                     is_new_function_created = true;
                 }
             });
@@ -201,82 +215,96 @@ fn show_functionio(
     changed
 }
 
-
-
-
 pub fn render_functions_tab(ctx: &egui::Context, app: &mut app::App) {
-    egui::SidePanel::left("funcs").resizable(false).show(ctx, |ui| {
-        ui.set_min_width(190.0);
-        ui.set_max_width(190.0);
+    egui::SidePanel
+        ::left("funcs")
+        .resizable(false)
+        .show(ctx, |ui| {
+            ui.set_min_width(190.0);
+            ui.set_max_width(190.0);
 
-        egui::TopBottomPanel::top("add_func").show_inside(ui, |ui| {
-            ui.vertical_centered(|ui| {
-                if ui.button("+ Add Function").clicked() {
-                    app.new_function_window = Some(app::CreateFunctionDialog::default());
-                }
-            });
-        });
-
-        let mut to_remove = None;
-        let mut to_modify = (None, String::new());
-        let mut change_current_function = None;
-
-        egui::ScrollArea::vertical()
-            .auto_shrink([false; 2])
-            .min_scrolled_height(64.0)
-            .show(ui, |ui| {
-                ui.vertical(|ui| {
-                    for (index, function) in app.app_state.functions.iter().enumerate() {
-                        ui.horizontal(|ui| {
-                            let mut function_name = function.name.to_string();
-
-                            if
-                                ui
-                                    .selectable_label(app.app_state.current_function == index, "↪")
-                                    .clicked()
-                            {
-                                change_current_function = Some(index);
-                            }
-                            if function.modifiable_name {
-                                if
-                                    ui
-                                        .add(
-                                            egui::TextEdit::singleline(
-                                                &mut function_name
-                                            ).desired_width(133.0)
-                                        )
-                                        .changed()
-                                {
-                                    to_modify.1 = function_name;
-                                    to_modify.0 = Some(index);
-                                }
-                            } else {
-                                ui.label(function_name);
-                            }
-                            if function.removable {
-                                if ui.button("x").clicked() {
-                                    to_remove = Some(index);
-                                }
-                            }
-                        });
+            egui::TopBottomPanel::top("add_func").show_inside(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    if ui.button("+ Add Function").clicked() {
+                        app.new_function_window = Some(app::CreateFunctionDialog::default());
                     }
                 });
             });
 
-        if let Some(index) = to_modify.0 {
-            app.app_state.functions[index].name = utils::uniquify_name(to_modify.1, &app.app_state.functions);
-        }
+            let mut to_remove = None;
+            let mut to_modify = (None, String::new());
+            let mut change_current_function = None;
 
-        if let Some(index) = to_remove {
-            app.app_state.functions.remove(index);
-            app.app_state.current_function = 0;
-        }
-        if let Some(index) = change_current_function {
-            app.app_state.functions[app.app_state.current_function].graph = std::mem::replace(
-                &mut app.app_state.graph,
-                std::mem::replace(&mut app.app_state.functions[index].graph, app::NodeGraphExample::default())
-            );
-            app.app_state.current_function = index;
-        }
-    });
+            egui::ScrollArea
+                ::vertical()
+                .auto_shrink([false; 2])
+                .min_scrolled_height(64.0)
+                .show(ui, |ui| {
+                    ui.vertical(|ui| {
+                        for function in app.app_state.functions.iter() {
+                            ui.horizontal(|ui| {
+                                let mut function_name = function.1.name.to_string();
+
+                                if
+                                    ui
+                                        .selectable_label(
+                                            app.app_state.current_function == function.0,
+                                            "↪"
+                                        )
+                                        .clicked()
+                                {
+                                    change_current_function = Some(function.0);
+                                }
+                                if function.1.modifiable_name {
+                                    if
+                                        ui
+                                            .add(
+                                                egui::TextEdit
+                                                    ::singleline(&mut function_name)
+                                                    .desired_width(133.0)
+                                            )
+                                            .changed()
+                                    {
+                                        to_modify.1 = function_name;
+                                        to_modify.0 = Some(function.0);
+                                    }
+                                } else {
+                                    ui.label(function_name);
+                                }
+                                if function.1.removable {
+                                    if ui.button("x").clicked() {
+                                        to_remove = Some(function.0);
+                                    }
+                                }
+                            });
+                        }
+                    });
+                });
+
+            if let Some(index) = to_modify.0 {
+                app.app_state.functions[index].name = utils::uniquify_name_slot(
+                    to_modify.1,
+                    &app.app_state.functions
+                );
+            }
+
+            if let Some(index) = to_remove {
+                app.app_state.functions.remove(index);
+                app.app_state.current_function = app.app_state.functions
+                    .keys()
+                    .into_iter()
+                    .last()
+                    .expect("at least one function");
+            }
+            if let Some(index) = change_current_function {
+                app.app_state.functions[app.app_state.current_function].graph = std::mem::replace(
+                    &mut app.app_state.graph,
+                    std::mem::replace(
+                        &mut app.app_state.functions[index].graph,
+                        app::NodeGraphExample::default()
+                    )
+                );
+                app.app_state.current_function = index;
+            }
+        });
 }
