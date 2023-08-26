@@ -44,7 +44,7 @@ pub enum MyDataType {
     Integer,
     Float,
     Boolean,
-    Execution
+    Execution,
 }
 
 /// In the graph, input parameters can optionally have a constant value. This
@@ -58,16 +58,16 @@ pub enum MyDataType {
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub enum MyValueType {
     String {
-        value: String
+        value: String,
     },
     Integer {
-        value: i32
+        value: i32,
     },
     Float {
-        value: f64
+        value: f64,
     },
     Boolean {
-        value: bool
+        value: bool,
     },
     Execution,
 }
@@ -180,7 +180,6 @@ impl DataTypeTrait<MyGraphState> for MyDataType {
             MyDataType::Float => Cow::Borrowed("Float"),
             MyDataType::Boolean => Cow::Borrowed("Boolean"),
             MyDataType::Execution => Cow::Borrowed("Execution"),
-
         }
     }
 }
@@ -206,10 +205,8 @@ impl NodeTemplateTrait for MyNodeTemplate {
     // this is what allows the library to show collapsible lists in the node finder.
     fn node_finder_categories(&self, _user_state: &mut Self::UserState) -> Vec<&'static str> {
         match self {
-            | MyNodeTemplate::Print
-            | MyNodeTemplate::Ask => vec!["I/O"],
-            | MyNodeTemplate::Enter
-            | MyNodeTemplate::Function(_) => vec!["Special"],
+            MyNodeTemplate::Print | MyNodeTemplate::Ask => vec!["I/O"],
+            MyNodeTemplate::Enter | MyNodeTemplate::Function(_) => vec!["Special"],
         }
     }
 
@@ -245,11 +242,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
             );
         };
         let classic_output = |graph: &mut MyGraph, name: &str, typ: MyDataType| {
-            graph.add_output_param(
-                node_id,
-                name.to_string(),
-                typ
-            );
+            graph.add_output_param(node_id, name.to_string(), typ);
         };
 
         let exe_input = |graph: &mut MyGraph, name: &str| {
@@ -263,39 +256,100 @@ impl NodeTemplateTrait for MyNodeTemplate {
             );
         };
         let exe_output = |graph: &mut MyGraph, name: &str| {
-            graph.add_output_param(
-                node_id,
-                name.to_string(),
-                MyDataType::Execution,
-            );
+            graph.add_output_param(node_id, name.to_string(), MyDataType::Execution);
         };
 
         match self {
-
-
             MyNodeTemplate::Enter => {
                 exe_output(graph, "Enter");
             }
-            
+
             MyNodeTemplate::Ask => {
                 exe_input(graph, "");
                 exe_output(graph, "");
-                classic_input(graph, "What ?", MyDataType::String, MyValueType::String { value: "".to_string() });
+                classic_input(graph, "What ?", MyDataType::String, MyValueType::String {
+                    value: "".to_string(),
+                });
                 classic_output(graph, "Answer", MyDataType::String);
             }
             MyNodeTemplate::Print => {
                 exe_input(graph, "");
                 exe_output(graph, "");
-                classic_input(graph, "What ?", MyDataType::String, MyValueType::String { value: "".to_string() });
+                classic_input(graph, "What ?", MyDataType::String, MyValueType::String {
+                    value: "".to_string(),
+                });
             }
-            
             MyNodeTemplate::Function(x) => {
                 if let Some(function_index) = x {
                     for input in user_state.functions[*function_index].input.iter() {
-                        exe_input(graph, &input.name);
+                        match &input.value {
+                            VariableValue::Boolean(x) => {
+                                classic_input(
+                                    graph,
+                                    &input.name,
+                                    MyDataType::Boolean,
+                                    MyValueType::Boolean { value: x.to_owned() }
+                                );
+                            }
+                            VariableValue::String(x) => {
+                                classic_input(
+                                    graph,
+                                    &input.name,
+                                    MyDataType::String,
+                                    MyValueType::String { value: x.to_owned() }
+                                );
+                            }
+                            VariableValue::Integer(x) => {
+                                classic_input(
+                                    graph,
+                                    &input.name,
+                                    MyDataType::Integer,
+                                    MyValueType::Integer { value: x.to_owned() as i32 }
+                                );
+                            }
+                            VariableValue::Float(x) => {
+                                classic_input(
+                                    graph,
+                                    &input.name,
+                                    MyDataType::Float,
+                                    MyValueType::Float { value: x.to_owned() }
+                                );
+                            }
+                            VariableValue::Execution => {
+                                exe_input(graph, &input.name);
+                            }
+                        }
                     }
                     for output in user_state.functions[*function_index].output.iter() {
-                        exe_output(graph, &output.name);
+                        match &output.value {
+                            VariableValue::Boolean(_) => {
+                                classic_output(
+                                    graph,
+                                    &output.name,
+                                    MyDataType::Boolean);
+                            }
+                            VariableValue::String(_) => {
+                                classic_output(
+                                    graph,
+                                    &output.name,
+                                    MyDataType::String);
+                            }
+                            VariableValue::Integer(_) => {
+                                classic_output(
+                                    graph,
+                                    &output.name,
+                                    MyDataType::Integer);
+                            }
+                            VariableValue::Float(_) => {
+                                classic_output(
+                                    graph,
+                                    &output.name,
+                                    MyDataType::Float);
+                            }
+                            VariableValue::Execution => {
+                                exe_output(graph, &output.name);
+                            }
+                        }
                     }
                 }
             }
@@ -315,7 +369,7 @@ impl NodeTemplateIter for AllMyNodeTemplates {
             MyNodeTemplate::Function(None),
             MyNodeTemplate::Enter,
             MyNodeTemplate::Ask,
-            MyNodeTemplate::Print,
+            MyNodeTemplate::Print
         ]
     }
 }
