@@ -175,6 +175,7 @@ fn show_functionio(
         (app::VariableValue::Integer(0.0), "Integer"),
         (app::VariableValue::Float(0.0), "Float"),
         (app::VariableValue::Boolean(true), "Boolean"),
+        (app::VariableValue::Execution, "Execution"),
     ];
 
     let mut changed = (None, false);
@@ -208,6 +209,7 @@ fn show_functionio(
         app::VariableValue::Boolean(ref mut x) => {
             ui.checkbox(x, "".to_string());
         }
+        app::VariableValue::Execution => {}
     }
     if ui.button("x").clicked() {
         changed.1 = true;

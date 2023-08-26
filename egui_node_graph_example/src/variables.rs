@@ -89,6 +89,7 @@ pub fn render_variables_tab(ctx: &egui::Context, app: &mut app::App) {
                                     app::VariableValue::Boolean(ref mut x) => {
                                         ui.checkbox(x, "".to_string());
                                     }
+                                    app::VariableValue::Execution => {}
                                 }
 
                                 if variable.removable {
