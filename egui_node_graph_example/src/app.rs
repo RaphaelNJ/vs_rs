@@ -17,6 +17,7 @@ use slotmap::SlotMap;
 use crate::functions;
 use crate::utils;
 use crate::variables;
+use crate::compiler;
 
 const DISABLE_RECURSIVE_FUNCTIONS: bool = true;
 
@@ -129,8 +130,6 @@ pub enum MyNodeTemplate {
 /// mechanism allows creating additional side effects from user code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MyResponse {
-    SetActiveNode(NodeId),
-    ClearActiveNode,
     AsignFunction(NodeId, Option<functions::FunctionId>),
 }
 
@@ -464,24 +463,6 @@ impl NodeDataTrait for MyNodeData {
         // UIs based on that.
 
         let mut responses = vec![];
-        let is_active = user_state.active_node.map(|id| id == node_id).unwrap_or(false);
-
-        // Pressing the button will emit a custom user response to either set,
-        // or clear the active node. These responses do nothing by themselves,
-        // the library only makes the responses available to you after the graph
-        // has been drawn. See below at the update method for an example.
-        if !is_active {
-            if ui.button("👁 Set active").clicked() {
-                responses.push(NodeResponse::User(MyResponse::SetActiveNode(node_id)));
-            }
-        } else {
-            let button = egui::Button
-                ::new(egui::RichText::new("👁 Active").color(egui::Color32::BLACK))
-                .fill(egui::Color32::GOLD);
-            if ui.add(button).clicked() {
-                responses.push(NodeResponse::User(MyResponse::ClearActiveNode));
-            }
-        }
 
         if let MyNodeTemplate::Function(mut current_value) = graph[node_id].user_data.template {
             let value = current_value.clone();
@@ -520,7 +501,7 @@ impl NodeDataTrait for MyNodeData {
     }
 }
 
-type MyGraph = Graph<MyNodeData, MyDataType, MyValueType>;
+pub type MyGraph = Graph<MyNodeData, MyDataType, MyValueType>;
 type MyEditorState = GraphEditorState<
     MyNodeData,
     MyDataType,
@@ -811,12 +792,6 @@ impl NodeGraphExample {
             // connection is created
             if let NodeResponse::User(user_event) = node_response {
                 match user_event {
-                    MyResponse::SetActiveNode(node) => {
-                        self.user_state.active_node = Some(node);
-                    }
-                    MyResponse::ClearActiveNode => {
-                        self.user_state.active_node = None;
-                    }
                     MyResponse::AsignFunction(node, function) => {
                         self.state.graph.nodes[node].user_data.template =
                             MyNodeTemplate::Function(function);
@@ -857,7 +832,7 @@ impl NodeGraphExample {
 
         if let Some(node) = self.user_state.active_node {
             if self.state.graph.nodes.contains_key(node) {
-                let text = match evaluate_node(&self.state.graph, node, &mut HashMap::new()) {
+                let text = match compiler::compile(&self.state.graph, node, &mut HashMap::new()) {
                     Ok(value) => format!("The result is: {:?}", value),
                     Err(err) => format!("Execution error: {}", err),
                 };
@@ -875,7 +850,7 @@ impl NodeGraphExample {
     }
 }
 
-type OutputsCache = HashMap<OutputId, MyValueType>;
+pub type OutputsCache = HashMap<OutputId, MyValueType>;
 
 /// Recursively evaluates all dependencies of this node, then evaluates the node itself.
 pub fn evaluate_node(

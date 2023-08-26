@@ -7,6 +7,7 @@ mod functions;
 mod variables;
 mod app;
 mod utils;
+mod compiler;
 
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
