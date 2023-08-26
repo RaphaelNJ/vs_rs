@@ -244,7 +244,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 true
             );
         };
-        let classic_output = |graph: &mut MyGraph, name: &str, typ: MyDataType, value: MyValueType| {
+        let classic_output = |graph: &mut MyGraph, name: &str, typ: MyDataType| {
             graph.add_output_param(
                 node_id,
                 name.to_string(),
@@ -281,7 +281,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 exe_input(graph, "");
                 exe_output(graph, "");
                 classic_input(graph, "What ?", MyDataType::String, MyValueType::String { value: "".to_string() });
-                classic_output(graph, "Answer", MyDataType::String, MyValueType::String { value: "".to_string() });
+                classic_output(graph, "Answer", MyDataType::String);
             }
             MyNodeTemplate::Print => {
                 exe_input(graph, "");
