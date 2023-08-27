@@ -32,7 +32,7 @@ use serde::{ Deserialize, Serialize };
 #[derive(Debug)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub struct MyNodeData {
-    template: MyNodeTemplate,
+    pub template: MyNodeTemplate,
 }
 
 /// `DataType`s are what defines the possible range of connections when
@@ -322,28 +322,16 @@ impl NodeTemplateTrait for MyNodeTemplate {
                     for output in user_state.functions[*function_index].output.iter() {
                         match &output.value {
                             VariableValue::Boolean(_) => {
-                                classic_output(
-                                    graph,
-                                    &output.name,
-                                    MyDataType::Boolean);
+                                classic_output(graph, &output.name, MyDataType::Boolean);
                             }
                             VariableValue::String(_) => {
-                                classic_output(
-                                    graph,
-                                    &output.name,
-                                    MyDataType::String);
+                                classic_output(graph, &output.name, MyDataType::String);
                             }
                             VariableValue::Integer(_) => {
-                                classic_output(
-                                    graph,
-                                    &output.name,
-                                    MyDataType::Integer);
+                                classic_output(graph, &output.name, MyDataType::Integer);
                             }
                             VariableValue::Float(_) => {
-                                classic_output(
-                                    graph,
-                                    &output.name,
-                                    MyDataType::Float);
+                                classic_output(graph, &output.name, MyDataType::Float);
                             }
                             VariableValue::Execution => {
                                 exe_output(graph, &output.name);
@@ -723,7 +711,33 @@ impl eframe::App for App {
                     self.open_file_dialog = Some((dialog, SaveOrLoad::Save));
                 }
                 if ui.button("Compile").clicked() {
-                    // TODO
+                    self.app_state.graph = std::mem::replace(
+                        &mut self.app_state.functions[self.app_state.current_function].graph,
+                        std::mem::replace(&mut self.app_state.graph, NodeGraphExample::default())
+                    );
+
+                    let text = match compiler::compile(&self.app_state, MyNodeTemplate::Enter) {
+                        Ok(value) => format!("The result is: {:?}", value),
+                        Err(err) => format!("Execution error: {}", err),
+                    };
+                    println!("{}", text);
+                    ctx.debug_painter().text(
+                        egui::pos2(10.0, 35.0),
+                        egui::Align2::LEFT_TOP,
+                        text,
+                        TextStyle::Button.resolve(&ctx.style()),
+                        egui::Color32::WHITE
+                    );
+
+                    self.app_state.functions[self.app_state.current_function].graph =
+                        std::mem::replace(
+                            &mut self.app_state.graph,
+                            std::mem::replace(
+                                &mut self.app_state.functions
+                                    [self.app_state.current_function].graph,
+                                NodeGraphExample::default()
+                            )
+                        );
                 }
             });
             if let Some(dialog) = &mut self.open_file_dialog {
@@ -827,24 +841,6 @@ impl NodeGraphExample {
                         );
                     }
                 }
-            }
-        }
-
-        if let Some(node) = self.user_state.active_node {
-            if self.state.graph.nodes.contains_key(node) {
-                let text = match compiler::compile(&self.state.graph, node, &mut HashMap::new()) {
-                    Ok(value) => format!("The result is: {:?}", value),
-                    Err(err) => format!("Execution error: {}", err),
-                };
-                ctx.debug_painter().text(
-                    egui::pos2(10.0, 35.0),
-                    egui::Align2::LEFT_TOP,
-                    text,
-                    TextStyle::Button.resolve(&ctx.style()),
-                    egui::Color32::WHITE
-                );
-            } else {
-                self.user_state.active_node = None;
             }
         }
     }
