@@ -109,8 +109,8 @@ fn evaluate_function(graph: &MyGraph, enter_node: NodeId) -> String {
                     graph.nodes.get(graph[x.0].node).unwrap().user_data.template
                 {
                     app::MyNodeTemplate::Enter => "".to_string(),
-                    app::MyNodeTemplate::Print => format!("print({})", filtered_outputs[0]),
-                    app::MyNodeTemplate::Ask => format!("{} = ask({})", outputs_cache.get(&node.outputs[1].1).unwrap(), filtered_outputs[0]),
+                    app::MyNodeTemplate::Print => format!("io.write({})", filtered_outputs[0]),
+                    app::MyNodeTemplate::Ask => format!("local {} = io.read({})", outputs_cache.get(&node.outputs[1].1).unwrap(), filtered_outputs[0]),
                     app::MyNodeTemplate::Function(_) => "".to_string()
                 };
 
