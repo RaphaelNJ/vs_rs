@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use egui_node_graph::{ NodeId, OutputId, InputParamKind, InputParam };
+use egui_node_graph::{ NodeId, OutputId, InputId, Node };
 use slotmap::Key;
 
-use crate::app::{ self, NodeGraphExample, MyGraphState, MyGraph, MyValueType, MyDataType };
+use crate::app::{ self, MyGraph, MyValueType, MyDataType, MyNodeData };
 
 pub fn compile(
     app_state: &app::AppState,
@@ -33,16 +33,134 @@ pub fn compile(
         return Err("You don't have any Enter node".to_string());
     };
 
-    println!("\n\n-----------\n\n");
-
-    evaluate_function(
-        &app_state.functions.get(app_state.main_graph_id).unwrap().graph.state.graph,
-        enter_node_id
-    );
+    let graph = &app_state.functions.get(app_state.main_graph_id).unwrap().graph.state.graph;
+    let enter_node = graph.nodes.get(enter_node_id).unwrap();
 
     println!("\n\n-----------\n\n");
+
+    let result = evaluate_functionn(graph, enter_node, &mut HashMap::new());
+
+    println!("\n\n-----------\n\n");
+
+
+    println!("{}", result);
 
     Ok(app::MyValueType::Boolean { value: true })
+}
+
+fn evaluate_functionn(
+    graph: &MyGraph,
+    next_node: &Node<MyNodeData>,
+    outputs_cache: &mut HashMap<OutputId, String>
+) -> String {
+    // println!("{}", node.label);
+
+    let mut inputs = vec![];
+
+    for y in next_node.inputs(graph) {
+        if y.typ == MyDataType::Execution {
+            inputs.push(None);
+            continue;
+        }
+        if let Some(z) = graph.connection(y.id) {
+            inputs.push(
+                outputs_cache
+                    .get(&z)
+                    .clone()
+                    .map_or(None, |x| Some(x.to_string()))
+            );
+            println!("{:?} -- {:?}", z, outputs_cache);
+        } else {
+            inputs.push(
+                Some(match &y.value {
+                    MyValueType::String { value } => format!("\"{value}\""),
+                    MyValueType::Integer { value } => value.to_string(),
+                    MyValueType::Float { value } => value.to_string(),
+                    MyValueType::Boolean { value } => value.to_string(),
+                    MyValueType::Execution { value } => "".to_string(),
+                })
+            );
+        }
+    }
+    let filtered_inputs: Vec<String> = inputs
+        .into_iter()
+        .filter_map(|option| option)
+        .collect();
+
+    println!("{:?}", filtered_inputs);
+    println!("{:?}", next_node.user_data.template);
+
+    let mut executions = vec![];
+    let mut executions_index = vec![];
+
+    for y in next_node.outputs(graph) {
+        if y.typ == MyDataType::Execution {
+            executions_index.push(y.id);
+            continue;
+        }
+        outputs_cache.insert(y.id, format!("var_{:?}", y.id.data()));
+    }
+
+    for y in executions_index.iter() {
+        for x in graph.iter_connections() {
+            if x.1 == *y {
+                executions.push(
+                    if let Some(z) = graph.nodes.get(graph[x.0].node) {
+                        evaluate_functionn(graph, z, outputs_cache)
+                    } else {
+                        "".to_owned()
+                    }
+                );
+            }
+        }
+    }
+
+    println!("exe -> {:?}", executions);
+
+    let script_line = match next_node.user_data.template {
+        app::MyNodeTemplate::Enter => "".to_string(),
+        app::MyNodeTemplate::Print => format!("io.write({})", filtered_inputs[0]),
+        app::MyNodeTemplate::Ask => {
+            format!(
+                "local {} = io.read({}, (func -> {}))",
+                outputs_cache.get(&next_node.outputs[2].1).unwrap(),
+                filtered_inputs[0],
+                executions.get(1).map_or("default", |x| x),
+            )
+        }
+        app::MyNodeTemplate::Function(_) => "".to_string(),
+    };
+
+    println!("THE LINE -> {}", script_line);
+
+    format!(
+        "{} -- {}",
+        script_line,
+        executions.get(0).map_or("default", |x| x)
+    )
+
+    // for x in graph.iter_connections() {
+    //     if
+    //         node
+    //             .output_ids()
+    //             .find(|y| y == &x.1)
+    //             .is_some()
+    //     {
+    //         // println!("{:?}", graph[x.0].node);
+
+    //         if let MyDataType::Execution = graph[x.0].typ {
+    //             evaluate_functionn(graph, graph[x.0].node, outputs_cache);
+    //         }
+
+    //     }
+    // }
+
+    // match node.user_data.template {
+    //     app::MyNodeTemplate::Enter => {}
+    //     app::MyNodeTemplate::Print => {}
+    //     app::MyNodeTemplate::Ask => {}
+    //     app::MyNodeTemplate::Function(_) => {}
+    // }
 }
 
 fn evaluate_function(graph: &MyGraph, enter_node: NodeId) -> String {
@@ -82,7 +200,8 @@ fn evaluate_function(graph: &MyGraph, enter_node: NodeId) -> String {
                                 MyValueType::Integer { value } => value.to_string(),
                                 MyValueType::Float { value } => value.to_string(),
                                 MyValueType::Boolean { value } => value.to_string(),
-                                MyValueType::Execution => "".to_string(),
+                                MyValueType::Execution { value } =>
+                                    evaluate_function(graph, current_node.unwrap()),
                             })
                         );
                     }
@@ -96,8 +215,6 @@ fn evaluate_function(graph: &MyGraph, enter_node: NodeId) -> String {
                 println!("{:?}", filtered_outputs);
                 println!("{:?}", graph.nodes.get(graph[x.0].node).unwrap().user_data.template);
 
-
-                
                 for y in node.outputs(graph) {
                     if y.typ == MyDataType::Execution {
                         continue;
@@ -110,8 +227,13 @@ fn evaluate_function(graph: &MyGraph, enter_node: NodeId) -> String {
                 {
                     app::MyNodeTemplate::Enter => "".to_string(),
                     app::MyNodeTemplate::Print => format!("io.write({})", filtered_outputs[0]),
-                    app::MyNodeTemplate::Ask => format!("local {} = io.read({})", outputs_cache.get(&node.outputs[1].1).unwrap(), filtered_outputs[0]),
-                    app::MyNodeTemplate::Function(_) => "".to_string()
+                    app::MyNodeTemplate::Ask =>
+                        format!(
+                            "local {} = io.read({})",
+                            outputs_cache.get(&node.outputs[1].1).unwrap(),
+                            filtered_outputs[0]
+                        ),
+                    app::MyNodeTemplate::Function(_) => "".to_string(),
                 };
 
                 script = format!("{script}\n{script_line}");
@@ -121,9 +243,7 @@ fn evaluate_function(graph: &MyGraph, enter_node: NodeId) -> String {
             break;
         }
         current_node = std::mem::replace(&mut next_node, None);
-        println!("");
     }
 
-    println!("{script}");
-    "".to_owned()
+    script
 }

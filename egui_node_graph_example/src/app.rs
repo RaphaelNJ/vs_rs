@@ -70,7 +70,9 @@ pub enum MyValueType {
     Boolean {
         value: bool,
     },
-    Execution,
+    Execution {
+        value: String
+    },
 }
 
 impl Default for MyValueType {
@@ -249,7 +251,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 node_id,
                 name.to_string(),
                 MyDataType::Execution,
-                MyValueType::Execution,
+                MyValueType::Execution { value: "".to_owned()},
                 InputParamKind::ConnectionOnly,
                 true
             );
@@ -265,6 +267,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
 
             MyNodeTemplate::Ask => {
                 exe_input(graph, "");
+                exe_output(graph, "");
                 exe_output(graph, "");
                 classic_input(graph, "What ?", MyDataType::String, MyValueType::String {
                     value: "".to_string(),
@@ -413,7 +416,7 @@ impl WidgetValueTrait for MyValueType {
                     ui.checkbox(value, "")
                 });
             }
-            MyValueType::Execution => {
+            MyValueType::Execution { value: _ } => {
                 ui.horizontal(|ui| {
                     ui.label(param_name);
                 });
