@@ -3,11 +3,12 @@ use std::collections::HashMap;
 use egui_node_graph::{ NodeId, OutputId, InputId, Node };
 use slotmap::Key;
 
-use crate::app::{ self, MyGraph, MyValueType, MyDataType, MyNodeData };
+use crate::app::{ self, MyGraph, MyValueType, MyDataType };
+use crate::nodes::{self, CompilesTo};
 
 pub fn compile(
     app_state: &app::AppState,
-    enter_node: app::MyNodeTemplate
+    enter_node: nodes::MyNodeTemplate
 ) -> anyhow::Result<app::MyValueType, String> {
     let mut already_a_enter = false;
     let mut is_enter_node_id = None;
@@ -50,7 +51,7 @@ pub fn compile(
 
 fn evaluate_functionn(
     graph: &MyGraph,
-    next_node: &Node<MyNodeData>,
+    next_node: &Node<nodes::MyNodeData>,
     outputs_cache: &mut HashMap<OutputId, String>
 ) -> String {
     // println!("{}", node.label);
@@ -117,18 +118,7 @@ fn evaluate_functionn(
 
     println!("exe -> {:?}", executions);
 
-    let script_line = match next_node.user_data.template {
-        app::MyNodeTemplate::Enter => "".to_string(),
-        app::MyNodeTemplate::Print => format!("(io.write {})", filtered_inputs[0]),
-        app::MyNodeTemplate::Ask => {
-            format!(
-                "(io.write {}) (local {} (io.read))",
-                filtered_inputs[0],
-                outputs_cache.get(&next_node.outputs[2].1).unwrap(),
-            )
-        }
-        app::MyNodeTemplate::Function(_) => "".to_string(),
-    };
+    let script_line = next_node.user_data.template.compile_to(outputs_cache, &executions, &filtered_inputs, next_node);
 
     println!("THE LINE -> {}", script_line);
 

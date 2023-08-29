@@ -18,22 +18,15 @@ use crate::functions;
 use crate::utils;
 use crate::variables;
 use crate::compiler;
+use crate::nodes;
 
-const DISABLE_RECURSIVE_FUNCTIONS: bool = true;
+pub const DISABLE_RECURSIVE_FUNCTIONS: bool = true;
 
 #[cfg(feature = "persistence")]
 use serde::{ Deserialize, Serialize };
 
 // ========= First, define your user data types =============
 
-/// The NodeData holds a custom data struct inside each node. It's useful to
-/// store additional information that doesn't live in parameters. For this
-/// example, the node data stores the template (i.e. the "type") of the node.
-#[derive(Debug)]
-#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
-pub struct MyNodeData {
-    pub template: MyNodeTemplate,
-}
 
 /// `DataType`s are what defines the possible range of connections when
 /// attaching two ports together. The graph UI will make sure to not allow
@@ -114,18 +107,6 @@ impl MyValueType {
     }
 }
 
-/// NodeTemplate is a mechanism to define node templates. It's what the graph
-/// will display in the "new node" popup. The user code needs to tell the
-/// library how to convert a NodeTemplate into a Node.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
-pub enum MyNodeTemplate {
-    Enter,
-    Print,
-    Ask,
-    Function(Option<functions::FunctionId>),
-}
-
 /// The response type is used to encode side-effects produced when drawing a
 /// node in the graph. Most side-effects (creating new nodes, deleting existing
 /// nodes, handling connections...) are already handled by the library, but this
@@ -185,196 +166,18 @@ impl DataTypeTrait<MyGraphState> for MyDataType {
     }
 }
 
-// A trait for the node kinds, which tells the library how to build new nodes
-// from the templates in the node finder
-impl NodeTemplateTrait for MyNodeTemplate {
-    type NodeData = MyNodeData;
-    type DataType = MyDataType;
-    type ValueType = MyValueType;
-    type UserState = MyGraphState;
-    type CategoryType = &'static str;
-
-    fn node_finder_label(&self, _user_state: &mut Self::UserState) -> Cow<'_, str> {
-        Cow::Borrowed(match self {
-            MyNodeTemplate::Enter => "Enter Execution",
-            MyNodeTemplate::Print => "Print",
-            MyNodeTemplate::Ask => "Ask",
-            MyNodeTemplate::Function(_) => "Function",
-        })
-    }
-
-    // this is what allows the library to show collapsible lists in the node finder.
-    fn node_finder_categories(&self, _user_state: &mut Self::UserState) -> Vec<&'static str> {
-        match self {
-            MyNodeTemplate::Print | MyNodeTemplate::Ask => vec!["I/O"],
-            MyNodeTemplate::Enter | MyNodeTemplate::Function(_) => vec!["Special"],
-        }
-    }
-
-    fn node_graph_label(&self, user_state: &mut Self::UserState) -> String {
-        // It's okay to delegate this to node_finder_label if you don't want to
-        // show different names in the node finder and the node itself.
-        self.node_finder_label(user_state).into()
-    }
-
-    fn user_data(&self, _user_state: &mut Self::UserState) -> Self::NodeData {
-        MyNodeData { template: *self }
-    }
-
-    fn build_node(
-        &self,
-        graph: &mut Graph<Self::NodeData, Self::DataType, Self::ValueType>,
-        user_state: &mut Self::UserState,
-        node_id: NodeId
-    ) {
-        // The nodes are created empty by default. This function needs to take
-        // care of creating the desired inputs and outputs based on the template
-
-        // We define some closures here to avoid boilerplate. Note that this is
-        // entirely optional.
-        let classic_input = |graph: &mut MyGraph, name: &str, typ: MyDataType, value: MyValueType| {
-            graph.add_input_param(
-                node_id,
-                name.to_string(),
-                typ,
-                value,
-                InputParamKind::ConnectionOrConstant,
-                true
-            );
-        };
-        let classic_output = |graph: &mut MyGraph, name: &str, typ: MyDataType| {
-            graph.add_output_param(node_id, name.to_string(), typ);
-        };
-
-        let exe_input = |graph: &mut MyGraph, name: &str| {
-            graph.add_input_param(
-                node_id,
-                name.to_string(),
-                MyDataType::Execution,
-                MyValueType::Execution { value: "".to_owned()},
-                InputParamKind::ConnectionOnly,
-                true
-            );
-        };
-        let exe_output = |graph: &mut MyGraph, name: &str| {
-            graph.add_output_param(node_id, name.to_string(), MyDataType::Execution);
-        };
-
-        match self {
-            MyNodeTemplate::Enter => {
-                exe_output(graph, "Enter");
-            }
-
-            MyNodeTemplate::Ask => {
-                exe_input(graph, "");
-                exe_output(graph, "");
-                exe_output(graph, "");
-                classic_input(graph, "What ?", MyDataType::String, MyValueType::String {
-                    value: "".to_string(),
-                });
-                classic_output(graph, "Answer", MyDataType::String);
-            }
-            MyNodeTemplate::Print => {
-                exe_input(graph, "");
-                exe_output(graph, "");
-                classic_input(graph, "What ?", MyDataType::String, MyValueType::String {
-                    value: "".to_string(),
-                });
-            }
-            MyNodeTemplate::Function(x) => {
-                if let Some(function_index) = x {
-                    for input in user_state.functions[*function_index].input.iter() {
-                        match &input.value {
-                            VariableValue::Boolean(x) => {
-                                classic_input(
-                                    graph,
-                                    &input.name,
-                                    MyDataType::Boolean,
-                                    MyValueType::Boolean { value: x.to_owned() }
-                                );
-                            }
-                            VariableValue::String(x) => {
-                                classic_input(
-                                    graph,
-                                    &input.name,
-                                    MyDataType::String,
-                                    MyValueType::String { value: x.to_owned() }
-                                );
-                            }
-                            VariableValue::Integer(x) => {
-                                classic_input(
-                                    graph,
-                                    &input.name,
-                                    MyDataType::Integer,
-                                    MyValueType::Integer { value: x.to_owned() as i32 }
-                                );
-                            }
-                            VariableValue::Float(x) => {
-                                classic_input(
-                                    graph,
-                                    &input.name,
-                                    MyDataType::Float,
-                                    MyValueType::Float { value: x.to_owned() }
-                                );
-                            }
-                            VariableValue::Execution => {
-                                exe_input(graph, &input.name);
-                            }
-                        }
-                    }
-                    for output in user_state.functions[*function_index].output.iter() {
-                        match &output.value {
-                            VariableValue::Boolean(_) => {
-                                classic_output(graph, &output.name, MyDataType::Boolean);
-                            }
-                            VariableValue::String(_) => {
-                                classic_output(graph, &output.name, MyDataType::String);
-                            }
-                            VariableValue::Integer(_) => {
-                                classic_output(graph, &output.name, MyDataType::Integer);
-                            }
-                            VariableValue::Float(_) => {
-                                classic_output(graph, &output.name, MyDataType::Float);
-                            }
-                            VariableValue::Execution => {
-                                exe_output(graph, &output.name);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-pub struct AllMyNodeTemplates;
-impl NodeTemplateIter for AllMyNodeTemplates {
-    type Item = MyNodeTemplate;
-
-    fn all_kinds(&self) -> Vec<Self::Item> {
-        // This function must return a list of node kinds, which the node finder
-        // will use to display it to the user. Crates like strum can reduce the
-        // boilerplate in enumerating all variants of an enum.
-        vec![
-            MyNodeTemplate::Function(None),
-            MyNodeTemplate::Enter,
-            MyNodeTemplate::Ask,
-            MyNodeTemplate::Print
-        ]
-    }
-}
 
 impl WidgetValueTrait for MyValueType {
     type Response = MyResponse;
     type UserState = MyGraphState;
-    type NodeData = MyNodeData;
+    type NodeData = nodes::MyNodeData;
     fn value_widget(
         &mut self,
         param_name: &str,
         _node_id: NodeId,
         ui: &mut egui::Ui,
         _user_state: &mut MyGraphState,
-        _node_data: &MyNodeData,
+        _node_data: &nodes::MyNodeData,
         _kind: InputParamKind
     ) -> Vec<MyResponse> {
         // This trait is used to tell the library which UI to display for the
@@ -427,77 +230,13 @@ impl WidgetValueTrait for MyValueType {
     }
 }
 
-impl UserResponseTrait for MyResponse {}
-impl NodeDataTrait for MyNodeData {
-    type Response = MyResponse;
-    type UserState = MyGraphState;
-    type DataType = MyDataType;
-    type ValueType = MyValueType;
 
-    // This method will be called when drawing each node. This allows adding
-    // extra ui elements inside the nodes. In this case, we create an "active"
-    // button which introduces the concept of having an active node in the
-    // graph. This is done entirely from user code with no modifications to the
-    // node graph library.
-    fn bottom_ui(
-        &self,
-        ui: &mut egui::Ui,
-        node_id: NodeId,
-        graph: &Graph<MyNodeData, MyDataType, MyValueType>,
-        user_state: &mut Self::UserState
-    ) -> Vec<NodeResponse<MyResponse, MyNodeData>>
-        where MyResponse: UserResponseTrait
-    {
-        // This logic is entirely up to the user. In this case, we check if the
-        // current node we're drawing is the active one, by comparing against
-        // the value stored in the global user state, and draw different button
-        // UIs based on that.
-
-        let mut responses = vec![];
-
-        if let MyNodeTemplate::Function(mut current_value) = graph[node_id].user_data.template {
-            let value = current_value.clone();
-            if let Some(x) = current_value {
-                if !user_state.functions.contains_key(x) {
-                    current_value = None;
-                }
-            }
-
-            egui::ComboBox
-                ::from_id_source(node_id)
-                .selected_text(
-                    current_value.map_or("Choose a Function", |x| {
-                        user_state.functions.get(x).map_or("Choose a Function", |y| { &y.name })
-                    })
-                )
-                .width(74.0)
-                .show_ui(ui, |ui| {
-                    for x in user_state.functions.iter() {
-                        if !(DISABLE_RECURSIVE_FUNCTIONS && user_state.graph_id == x.0) {
-                            if user_state.main_graph_id != x.0 {
-                                ui.selectable_value(&mut current_value, Some(x.0), &x.1.name);
-                            }
-                        }
-                    }
-                });
-
-            if value != current_value {
-                responses.push(
-                    NodeResponse::User(MyResponse::AsignFunction(node_id, current_value))
-                );
-            }
-        }
-
-        responses
-    }
-}
-
-pub type MyGraph = Graph<MyNodeData, MyDataType, MyValueType>;
+pub type MyGraph = Graph<nodes::MyNodeData, MyDataType, MyValueType>;
 type MyEditorState = GraphEditorState<
-    MyNodeData,
+    nodes::MyNodeData,
     MyDataType,
     MyValueType,
-    MyNodeTemplate,
+    nodes::MyNodeTemplate,
     MyGraphState
 >;
 
@@ -719,7 +458,7 @@ impl eframe::App for App {
                         std::mem::replace(&mut self.app_state.graph, NodeGraphExample::default())
                     );
 
-                    let text = match compiler::compile(&self.app_state, MyNodeTemplate::Enter) {
+                    let text = match compiler::compile(&self.app_state, nodes::MyNodeTemplate::Enter) {
                         Ok(value) => format!("The result is: {:?}", value),
                         Err(err) => format!("Execution error: {}", err),
                     };
@@ -798,7 +537,7 @@ impl NodeGraphExample {
             .show(ctx, |ui| {
                 self.state.draw_graph_editor(
                     ui,
-                    AllMyNodeTemplates,
+                    nodes::AllMyNodeTemplates,
                     &mut self.user_state,
                     Vec::default()
                 )
@@ -811,7 +550,7 @@ impl NodeGraphExample {
                 match user_event {
                     MyResponse::AsignFunction(node, function) => {
                         self.state.graph.nodes[node].user_data.template =
-                            MyNodeTemplate::Function(function);
+                            nodes::MyNodeTemplate::Function(function);
                         let _ = self.state.graph.rename_node(
                             node,
                             format!(
