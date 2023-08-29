@@ -78,7 +78,7 @@ fn evaluate_functionn(
                     types::MyValueType::Integer { value } => value.to_string(),
                     types::MyValueType::Float { value } => value.to_string(),
                     types::MyValueType::Boolean { value } => value.to_string(),
-                    types::MyValueType::Execution { value } => "".to_string(),
+                    types::MyValueType::Execution => "".to_string(),
                 })
             );
         }

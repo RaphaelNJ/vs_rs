@@ -154,7 +154,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 node_id,
                 name.to_string(),
                 types::MyDataType::Execution,
-                types::MyValueType::Execution { value: "".to_owned() },
+                types::MyValueType::Execution,
                 InputParamKind::ConnectionOnly,
                 true
             );
