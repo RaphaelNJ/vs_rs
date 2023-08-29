@@ -4,9 +4,7 @@ use std::borrow::Cow;
 use eframe::egui::{self, DragValue};
 use egui_node_graph::*;
 
-#[cfg(feature = "persistence")]
 use bincode;
-#[cfg(feature = "persistence")]
 use serde::{ Deserialize, Serialize };
 
 use crate::app;
@@ -18,8 +16,7 @@ use crate::nodes;
 /// `DataType`s are what defines the possible range of connections when
 /// attaching two ports together. The graph UI will make sure to not allow
 /// attaching incompatible datatypes.
-#[derive(PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
+#[derive(PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum MyDataType {
     String,
     Integer,
@@ -35,8 +32,7 @@ pub enum MyDataType {
 /// this library makes no attempt to check this consistency. For instance, it is
 /// up to the user code in this example to make sure no parameter is created
 /// with a DataType of Scalar and a ValueType of Vec2.
-#[derive(Clone, Debug)]
-#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum MyValueType {
     String {
         value: String,
@@ -183,8 +179,7 @@ impl WidgetValueTrait for MyValueType {
 }
 
 
-#[derive(PartialEq, Clone, Debug)]
-#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
+#[derive(PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum VariableValue {
     String(String),
     Integer(f64),

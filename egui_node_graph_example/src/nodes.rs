@@ -4,11 +4,8 @@ use std::collections::HashMap;
 use eframe::egui;
 use egui_node_graph::*;
 
-#[cfg(feature = "persistence")]
 use std::io::{ Read, Write };
-#[cfg(feature = "persistence")]
 use std::fs::{ File, OpenOptions };
-#[cfg(feature = "persistence")]
 use bincode;
 
 use crate::functions;
@@ -17,8 +14,7 @@ use crate::app;
 /// The NodeData holds a custom data struct inside each node. It's useful to
 /// store additional information that doesn't live in parameters. For this
 /// example, the node data stores the template (i.e. the "type") of the node.
-#[derive(Debug)]
-#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct MyNodeData {
     pub template: MyNodeTemplate,
 }
@@ -29,8 +25,7 @@ pub struct MyNodeData {
 use strum::IntoEnumIterator; // 0.17.1
 use strum_macros::EnumIter; // 0.17.1
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumIter)]
-#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumIter, serde::Serialize, serde::Deserialize)]
 pub enum MyNodeTemplate {
     Enter,
     Print,

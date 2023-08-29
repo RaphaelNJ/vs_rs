@@ -21,12 +21,9 @@ fn main() {
         eframe::NativeOptions::default(),
         Box::new(|cc| {
             cc.egui_ctx.set_visuals(Visuals::dark());
-            #[cfg(feature = "persistence")]
             {
                 Box::<egui_node_graph_example::App>::default()
             }
-            #[cfg(not(feature = "persistence"))]
-            Box::<egui_node_graph_example::App>::default()
         }),
     )
     .expect("Failed to run native example");

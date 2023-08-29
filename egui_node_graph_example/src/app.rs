@@ -6,14 +6,10 @@ use egui_node_graph::*;
 use egui_file::FileDialog;
 use std::path::PathBuf;
 
-#[cfg(feature = "persistence")]
 use std::io::{ Read, Write };
-#[cfg(feature = "persistence")]
 use std::fs::{ File, OpenOptions };
-#[cfg(feature = "persistence")]
 use bincode;
 
-#[cfg(feature = "persistence")]
 use serde::{ Deserialize, Serialize };
 
 use slotmap::SlotMap;
@@ -41,8 +37,7 @@ pub enum MyResponse {
 /// The graph 'global' state. This state struct is passed around to the node and
 /// parameter drawing callbacks. The contents of this struct are entirely up to
 /// the user. For this example, we use it to keep track of the 'active' node.
-#[derive(Default)]
-#[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Default, Serialize, Deserialize)]
 pub struct MyGraphState {
     pub active_node: Option<NodeId>,
     pub functions: SlotMap<functions::FunctionId, GraphFunction>,
@@ -50,8 +45,7 @@ pub struct MyGraphState {
     pub main_graph_id: functions::FunctionId,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SaveOrLoad {
     Save,
     Load,
@@ -73,8 +67,7 @@ type MyEditorState = GraphEditorState<
     MyGraphState
 >;
 
-#[derive(Default)]
-#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
+#[derive(Default, Serialize, Deserialize)]
 pub struct NodeGraphExample {
     // The `GraphEditorState` is the top-level object. You "register" all your
     // custom types by specifying it as its generic parameters.
@@ -83,10 +76,8 @@ pub struct NodeGraphExample {
     pub user_state: MyGraphState,
 }
 
-#[cfg(feature = "persistence")]
 const PERSISTENCE_KEY: &str = "egui_node_graph";
 
-#[cfg(feature = "persistence")]
 impl NodeGraphExample {
     /// If the persistence feature is enabled, Called once before the first frame.
     /// Load previous app state (if any).
@@ -101,7 +92,6 @@ impl NodeGraphExample {
     }
 }
 
-#[cfg(feature = "persistence")]
 impl AppState {
     // Save the struct to the specified location using bincode
     pub fn save_to_file(&self, file_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
@@ -137,7 +127,7 @@ pub struct App {
     pub app_state: AppState,
 }
 
-#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
+#[derive(Serialize, Deserialize)]
 pub struct AppState {
     pub current_function: functions::FunctionId,
     pub functions: SlotMap<functions::FunctionId, GraphFunction>,
@@ -151,7 +141,7 @@ pub struct CreateFunctionDialog {
     pub output: Vec<FunctionIO>,
 }
 
-#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
+#[derive(Serialize, Deserialize)]
 pub struct GraphFunction {
     pub graph: NodeGraphExample,
     pub name: String,
@@ -162,13 +152,13 @@ pub struct GraphFunction {
     pub output: Vec<FunctionIO>,
 }
 
-#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
+#[derive(Serialize, Deserialize)]
 pub struct FunctionIO {
     pub name: String,
     pub value: types::VariableValue,
 }
 
-#[cfg_attr(feature = "persistence", derive(Serialize, Deserialize))]
+#[derive(Serialize, Deserialize)]
 pub struct Variable {
     pub name: String,
     pub value: types::VariableValue,
@@ -295,7 +285,6 @@ impl eframe::App for App {
             });
             if let Some(dialog) = &mut self.open_file_dialog {
                 if dialog.0.show(ctx).selected() {
-                    #[cfg(feature = "persistence")]
                     if let Some(file) = dialog.0.path() {
                         self.save_load_actions = Some(file.to_path_buf());
                         match dialog.1 {
@@ -334,7 +323,6 @@ impl eframe::App for App {
 }
 
 impl NodeGraphExample {
-    #[cfg(feature = "persistence")]
     /// If the persistence function is enabled,
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
