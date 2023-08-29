@@ -1,6 +1,7 @@
 use eframe::egui;
 use crate::utils;
 use crate::app;
+use crate::types;
 
 pub fn render_variables_tab(ctx: &egui::Context, app: &mut app::App) {
     egui::SidePanel
@@ -18,7 +19,7 @@ pub fn render_variables_tab(ctx: &egui::Context, app: &mut app::App) {
                                 "new".to_string(),
                                 &app.app_state.functions[app.app_state.current_function].variables_list
                             ),
-                            value: app::VariableValue::Boolean(true),
+                            value: types::VariableValue::Boolean(true),
                             removable: true,
                         };
                         app.app_state.functions[app.app_state.current_function].variables_list.push(new_variable);
@@ -55,10 +56,10 @@ pub fn render_variables_tab(ctx: &egui::Context, app: &mut app::App) {
                                 }
 
                                 let default_variable_values = [
-                                    (app::VariableValue::String("".to_owned()), "String"),
-                                    (app::VariableValue::Integer(0.0), "Integer"),
-                                    (app::VariableValue::Float(0.0), "Float"),
-                                    (app::VariableValue::Boolean(true), "Boolean"),
+                                    (types::VariableValue::String("".to_owned()), "String"),
+                                    (types::VariableValue::Integer(0.0), "Integer"),
+                                    (types::VariableValue::Float(0.0), "Float"),
+                                    (types::VariableValue::Boolean(true), "Boolean"),
                                 ];
 
                                 egui::ComboBox
@@ -76,20 +77,20 @@ pub fn render_variables_tab(ctx: &egui::Context, app: &mut app::App) {
                                     });
 
                                 match variable.value {
-                                    app::VariableValue::String(ref mut x) => {
+                                    types::VariableValue::String(ref mut x) => {
                                         ui.add(egui::TextEdit::singleline(x).desired_width(100.0));
                                     }
-                                    app::VariableValue::Integer(ref mut x) => {
+                                    types::VariableValue::Integer(ref mut x) => {
                                         ui.add(egui::DragValue::new(x).speed(1.0));
                                         *x = x.round();
                                     }
-                                    app::VariableValue::Float(ref mut x) => {
+                                    types::VariableValue::Float(ref mut x) => {
                                         ui.add(egui::DragValue::new(x).speed(0.1));
                                     }
-                                    app::VariableValue::Boolean(ref mut x) => {
+                                    types::VariableValue::Boolean(ref mut x) => {
                                         ui.checkbox(x, "".to_string());
                                     }
-                                    app::VariableValue::Execution => {}
+                                    types::VariableValue::Execution => {}
                                 }
 
                                 if variable.removable {

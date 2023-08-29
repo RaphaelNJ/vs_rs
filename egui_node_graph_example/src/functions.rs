@@ -1,5 +1,6 @@
 use crate::app;
 use crate::utils;
+use crate::types;
 
 use eframe::egui;
 use slotmap;
@@ -91,7 +92,7 @@ pub fn show_function_window(
                                                 "new_input".to_string(),
                                                 &create_function.input
                                             ),
-                                            value: app::VariableValue::Boolean(true),
+                                            value: types::VariableValue::Boolean(true),
                                         });
                                     }
                                 });
@@ -122,7 +123,7 @@ pub fn show_function_window(
                                                 "new_output".to_string(),
                                                 &create_function.output
                                             ),
-                                            value: app::VariableValue::Boolean(true),
+                                            value: types::VariableValue::Boolean(true),
                                         });
                                     }
                                 });
@@ -171,11 +172,11 @@ fn show_functionio(
     id: &str
 ) -> (Option<String>, bool) {
     let default_variable_values = [
-        (app::VariableValue::String("".to_owned()), "String"),
-        (app::VariableValue::Integer(0.0), "Integer"),
-        (app::VariableValue::Float(0.0), "Float"),
-        (app::VariableValue::Boolean(true), "Boolean"),
-        (app::VariableValue::Execution, "Execution"),
+        (types::VariableValue::String("".to_owned()), "String"),
+        (types::VariableValue::Integer(0.0), "Integer"),
+        (types::VariableValue::Float(0.0), "Float"),
+        (types::VariableValue::Boolean(true), "Boolean"),
+        (types::VariableValue::Execution, "Execution"),
     ];
 
     let mut changed = (None, false);
@@ -196,20 +197,20 @@ fn show_functionio(
             }
         });
     match function_oi.value {
-        app::VariableValue::String(ref mut x) => {
+        types::VariableValue::String(ref mut x) => {
             ui.add(egui::TextEdit::singleline(x).desired_width(100.0));
         }
-        app::VariableValue::Integer(ref mut x) => {
+        types::VariableValue::Integer(ref mut x) => {
             ui.add(egui::DragValue::new(x).speed(1.0));
             *x = x.round();
         }
-        app::VariableValue::Float(ref mut x) => {
+        types::VariableValue::Float(ref mut x) => {
             ui.add(egui::DragValue::new(x).speed(0.1));
         }
-        app::VariableValue::Boolean(ref mut x) => {
+        types::VariableValue::Boolean(ref mut x) => {
             ui.checkbox(x, "".to_string());
         }
-        app::VariableValue::Execution => {}
+        types::VariableValue::Execution => {}
     }
     if ui.button("x").clicked() {
         changed.1 = true;

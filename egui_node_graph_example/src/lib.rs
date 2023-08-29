@@ -8,6 +8,7 @@ mod variables;
 mod utils;
 mod compiler;
 mod nodes;
+mod types;
 pub use app::App;
 
 // ----------------------------------------------------------------------------

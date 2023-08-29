@@ -3,13 +3,14 @@ use std::collections::HashMap;
 use egui_node_graph::{ NodeId, OutputId, InputId, Node };
 use slotmap::Key;
 
-use crate::app::{ self, MyGraph, MyValueType, MyDataType };
+use crate::app::{ self, MyGraph };
 use crate::nodes::{self, CompilesTo};
+use crate::types;
 
 pub fn compile(
     app_state: &app::AppState,
     enter_node: nodes::MyNodeTemplate
-) -> anyhow::Result<app::MyValueType, String> {
+) -> anyhow::Result<String, String> {
     let mut already_a_enter = false;
     let mut is_enter_node_id = None;
     for x in app_state.functions.iter() {
@@ -44,9 +45,8 @@ pub fn compile(
     println!("\n\n-----------\n\n");
 
 
-    println!("{}", result);
 
-    Ok(app::MyValueType::Boolean { value: true })
+    Ok(result)
 }
 
 fn evaluate_functionn(
@@ -59,7 +59,7 @@ fn evaluate_functionn(
     let mut inputs = vec![];
 
     for y in next_node.inputs(graph) {
-        if y.typ == MyDataType::Execution {
+        if y.typ == types::MyDataType::Execution {
             inputs.push(None);
             continue;
         }
@@ -74,11 +74,11 @@ fn evaluate_functionn(
         } else {
             inputs.push(
                 Some(match &y.value {
-                    MyValueType::String { value } => format!("\"{value}\""),
-                    MyValueType::Integer { value } => value.to_string(),
-                    MyValueType::Float { value } => value.to_string(),
-                    MyValueType::Boolean { value } => value.to_string(),
-                    MyValueType::Execution { value } => "".to_string(),
+                    types::MyValueType::String { value } => format!("\"{value}\""),
+                    types::MyValueType::Integer { value } => value.to_string(),
+                    types::MyValueType::Float { value } => value.to_string(),
+                    types::MyValueType::Boolean { value } => value.to_string(),
+                    types::MyValueType::Execution { value } => "".to_string(),
                 })
             );
         }
@@ -95,7 +95,7 @@ fn evaluate_functionn(
     let mut executions_index = vec![];
 
     for y in next_node.outputs(graph) {
-        if y.typ == MyDataType::Execution {
+        if y.typ == types::MyDataType::Execution {
             executions_index.push(y.id);
             continue;
         }

@@ -12,6 +12,7 @@ use std::fs::{ File, OpenOptions };
 use bincode;
 
 use crate::functions;
+use crate::types;
 use crate::app;
 /// The NodeData holds a custom data struct inside each node. It's useful to
 /// store additional information that doesn't live in parameters. For this
@@ -84,8 +85,8 @@ impl CompilesTo for MyNodeTemplate {
 // from the templates in the node finder
 impl NodeTemplateTrait for MyNodeTemplate {
     type NodeData = MyNodeData;
-    type DataType = app::MyDataType;
-    type ValueType = app::MyValueType;
+    type DataType = types::MyDataType;
+    type ValueType = types::MyValueType;
     type UserState = app::MyGraphState;
     type CategoryType = &'static str;
 
@@ -132,8 +133,8 @@ impl NodeTemplateTrait for MyNodeTemplate {
         let classic_input = |
             graph: &mut app::MyGraph,
             name: &str,
-            typ: app::MyDataType,
-            value: app::MyValueType
+            typ: types::MyDataType,
+            value: types::MyValueType
         | {
             graph.add_input_param(
                 node_id,
@@ -144,7 +145,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 true
             );
         };
-        let classic_output = |graph: &mut app::MyGraph, name: &str, typ: app::MyDataType| {
+        let classic_output = |graph: &mut app::MyGraph, name: &str, typ: types::MyDataType| {
             graph.add_output_param(node_id, name.to_string(), typ);
         };
 
@@ -152,14 +153,14 @@ impl NodeTemplateTrait for MyNodeTemplate {
             graph.add_input_param(
                 node_id,
                 name.to_string(),
-                app::MyDataType::Execution,
-                app::MyValueType::Execution { value: "".to_owned() },
+                types::MyDataType::Execution,
+                types::MyValueType::Execution { value: "".to_owned() },
                 InputParamKind::ConnectionOnly,
                 true
             );
         };
         let exe_output = |graph: &mut app::MyGraph, name: &str| {
-            graph.add_output_param(node_id, name.to_string(), app::MyDataType::Execution);
+            graph.add_output_param(node_id, name.to_string(), types::MyDataType::Execution);
         };
 
         match self {
@@ -170,27 +171,27 @@ impl NodeTemplateTrait for MyNodeTemplate {
             MyNodeTemplate::Ask => {
                 exe_input(graph, "");
                 exe_output(graph, "");
-                classic_input(graph, "What ?", app::MyDataType::String, app::MyValueType::String {
+                classic_input(graph, "What ?", types::MyDataType::String, types::MyValueType::String {
                     value: "".to_string(),
                 });
-                classic_output(graph, "Answer", app::MyDataType::String);
+                classic_output(graph, "Answer", types::MyDataType::String);
             }
             MyNodeTemplate::If => {
                 exe_input(graph, "");
                 exe_output(graph, "");
                 exe_output(graph, "");
                 exe_output(graph, "");
-                classic_input(graph, "", app::MyDataType::String, app::MyValueType::String {
+                classic_input(graph, "", types::MyDataType::String, types::MyValueType::String {
                     value: "".to_string(),
                 });
-                classic_input(graph, "", app::MyDataType::String, app::MyValueType::String {
+                classic_input(graph, "", types::MyDataType::String, types::MyValueType::String {
                     value: "".to_string(),
                 });
             }
             MyNodeTemplate::Print => {
                 exe_input(graph, "");
                 exe_output(graph, "");
-                classic_input(graph, "What ?", app::MyDataType::String, app::MyValueType::String {
+                classic_input(graph, "What ?", types::MyDataType::String, types::MyValueType::String {
                     value: "".to_string(),
                 });
             }
@@ -198,58 +199,58 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 if let Some(function_index) = x {
                     for input in user_state.functions[*function_index].input.iter() {
                         match &input.value {
-                            app::VariableValue::Boolean(x) => {
+                            types::VariableValue::Boolean(x) => {
                                 classic_input(
                                     graph,
                                     &input.name,
-                                    app::MyDataType::Boolean,
-                                    app::MyValueType::Boolean { value: x.to_owned() }
+                                    types::MyDataType::Boolean,
+                                    types::MyValueType::Boolean { value: x.to_owned() }
                                 );
                             }
-                            app::VariableValue::String(x) => {
+                            types::VariableValue::String(x) => {
                                 classic_input(
                                     graph,
                                     &input.name,
-                                    app::MyDataType::String,
-                                    app::MyValueType::String { value: x.to_owned() }
+                                    types::MyDataType::String,
+                                    types::MyValueType::String { value: x.to_owned() }
                                 );
                             }
-                            app::VariableValue::Integer(x) => {
+                            types::VariableValue::Integer(x) => {
                                 classic_input(
                                     graph,
                                     &input.name,
-                                    app::MyDataType::Integer,
-                                    app::MyValueType::Integer { value: x.to_owned() as i32 }
+                                    types::MyDataType::Integer,
+                                    types::MyValueType::Integer { value: x.to_owned() as i32 }
                                 );
                             }
-                            app::VariableValue::Float(x) => {
+                            types::VariableValue::Float(x) => {
                                 classic_input(
                                     graph,
                                     &input.name,
-                                    app::MyDataType::Float,
-                                    app::MyValueType::Float { value: x.to_owned() }
+                                    types::MyDataType::Float,
+                                    types::MyValueType::Float { value: x.to_owned() }
                                 );
                             }
-                            app::VariableValue::Execution => {
+                            types::VariableValue::Execution => {
                                 exe_input(graph, &input.name);
                             }
                         }
                     }
                     for output in user_state.functions[*function_index].output.iter() {
                         match &output.value {
-                            app::VariableValue::Boolean(_) => {
-                                classic_output(graph, &output.name, app::MyDataType::Boolean);
+                            types::VariableValue::Boolean(_) => {
+                                classic_output(graph, &output.name, types::MyDataType::Boolean);
                             }
-                            app::VariableValue::String(_) => {
-                                classic_output(graph, &output.name, app::MyDataType::String);
+                            types::VariableValue::String(_) => {
+                                classic_output(graph, &output.name, types::MyDataType::String);
                             }
-                            app::VariableValue::Integer(_) => {
-                                classic_output(graph, &output.name, app::MyDataType::Integer);
+                            types::VariableValue::Integer(_) => {
+                                classic_output(graph, &output.name, types::MyDataType::Integer);
                             }
-                            app::VariableValue::Float(_) => {
-                                classic_output(graph, &output.name, app::MyDataType::Float);
+                            types::VariableValue::Float(_) => {
+                                classic_output(graph, &output.name, types::MyDataType::Float);
                             }
-                            app::VariableValue::Execution => {
+                            types::VariableValue::Execution => {
                                 exe_output(graph, &output.name);
                             }
                         }
@@ -282,8 +283,8 @@ impl UserResponseTrait for app::MyResponse {}
 impl NodeDataTrait for MyNodeData {
     type Response = app::MyResponse;
     type UserState = app::MyGraphState;
-    type DataType = app::MyDataType;
-    type ValueType = app::MyValueType;
+    type DataType = types::MyDataType;
+    type ValueType = types::MyValueType;
 
     // This method will be called when drawing each node. This allows adding
     // extra ui elements inside the nodes. In this case, we create an "active"
@@ -294,7 +295,7 @@ impl NodeDataTrait for MyNodeData {
         &self,
         ui: &mut egui::Ui,
         node_id: NodeId,
-        graph: &Graph<MyNodeData, app::MyDataType, app::MyValueType>,
+        graph: &Graph<MyNodeData, types::MyDataType, types::MyValueType>,
         user_state: &mut Self::UserState
     ) -> Vec<NodeResponse<app::MyResponse, MyNodeData>>
         where app::MyResponse: UserResponseTrait
