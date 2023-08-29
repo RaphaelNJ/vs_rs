@@ -50,9 +50,7 @@ pub enum MyValueType {
     Boolean {
         value: bool,
     },
-    Execution {
-        value: String
-    },
+    Execution
 }
 
 impl Default for MyValueType {
@@ -173,7 +171,7 @@ impl WidgetValueTrait for MyValueType {
                     ui.checkbox(value, "")
                 });
             }
-            MyValueType::Execution { value: _ } => {
+            MyValueType::Execution => {
                 ui.horizontal(|ui| {
                     ui.label(param_name);
                 });
