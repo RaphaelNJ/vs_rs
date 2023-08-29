@@ -4,8 +4,8 @@ use egui_node_graph::{ NodeId, OutputId, InputId, Node };
 use slotmap::Key;
 
 use crate::app::{ self, MyGraph };
-use crate::nodes::{self, CompilesTo};
-use crate::types;
+use crate::nodes::{ self, CompilesTo };
+use crate::types::{ self, VariableValue };
 
 pub fn compile(
     app_state: &app::AppState,
@@ -38,18 +38,27 @@ pub fn compile(
     let graph = &app_state.functions.get(app_state.main_graph_id).unwrap().graph.state.graph;
     let enter_node = graph.nodes.get(enter_node_id).unwrap();
 
+    let mut result = String::new();
+    for x in &app_state.functions.get(app_state.main_graph_id).unwrap().variables_list {
+        result = format!("{} (local {} {})", result, x.name, match &x.value {
+            VariableValue::Boolean(y) => y.to_string(),
+            VariableValue::Float(y) => y.to_string(),
+            VariableValue::Integer(y) => y.to_string(),
+            VariableValue::String(y) => format!("{:?}", y),
+            VariableValue::Execution => String::new(),
+        });
+    }
+
     println!("\n\n-----------\n\n");
 
-    let result = evaluate_functionn(graph, enter_node, &mut HashMap::new());
+    result = format!("{} {}", result, evaluate_function(graph, enter_node, &mut HashMap::new()));
 
     println!("\n\n-----------\n\n");
-
-
 
     Ok(result)
 }
 
-fn evaluate_functionn(
+fn evaluate_function(
     graph: &MyGraph,
     next_node: &Node<nodes::MyNodeData>,
     outputs_cache: &mut HashMap<OutputId, String>
@@ -107,7 +116,7 @@ fn evaluate_functionn(
             if x.1 == *y {
                 executions.push(
                     if let Some(z) = graph.nodes.get(graph[x.0].node) {
-                        evaluate_functionn(graph, z, outputs_cache)
+                        evaluate_function(graph, z, outputs_cache)
                     } else {
                         "".to_owned()
                     }
@@ -118,7 +127,12 @@ fn evaluate_functionn(
 
     println!("exe -> {:?}", executions);
 
-    let script_line = next_node.user_data.template.compile_to(outputs_cache, &executions, &filtered_inputs, next_node);
+    let script_line = next_node.user_data.template.compile_to(
+        outputs_cache,
+        &executions,
+        &filtered_inputs,
+        next_node
+    );
 
     println!("THE LINE -> {}", script_line);
 
