@@ -34,6 +34,35 @@ pub enum MyNodeTemplate {
     Function(Option<functions::FunctionId>),
 }
 
+pub struct NodeParams {
+    node_type: NodeType,
+    label: &'static str,
+}
+
+pub enum NodeType {
+    ExecutedAndExecute(&'static str, &'static str),
+    Executed(&'static str),
+    Execute(&'static str),
+    Data,
+}
+
+impl MyNodeTemplate {
+    fn get_node_params(&self) -> NodeParams {
+        match self {
+            MyNodeTemplate::Enter =>
+                NodeParams { node_type: NodeType::Execute("Enter"), label: "Enter" },
+            MyNodeTemplate::Print =>
+                NodeParams { node_type: NodeType::ExecutedAndExecute("", ""), label: "Print" },
+            MyNodeTemplate::Ask =>
+                NodeParams { node_type: NodeType::ExecutedAndExecute("", ""), label: "Ask" },
+            MyNodeTemplate::If =>
+                NodeParams { node_type: NodeType::ExecutedAndExecute("", "Continue"), label: "If" },
+            MyNodeTemplate::Function(_) =>
+                NodeParams { node_type: NodeType::ExecutedAndExecute("", ""), label: "Function" },
+        }
+    }
+}
+
 pub trait CompilesTo {
     fn compile_to(
         &self,
@@ -86,13 +115,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
     type CategoryType = &'static str;
 
     fn node_finder_label(&self, _user_state: &mut Self::UserState) -> Cow<'_, str> {
-        Cow::Borrowed(match self {
-            MyNodeTemplate::Enter => "Enter Execution",
-            MyNodeTemplate::Print => "Print",
-            MyNodeTemplate::Ask => "Ask",
-            MyNodeTemplate::If => "If",
-            MyNodeTemplate::Function(_) => "Function",
-        })
+        Cow::Borrowed(self.get_node_params().label)
     }
 
     // this is what allows the library to show collapsible lists in the node finder.
@@ -158,24 +181,37 @@ impl NodeTemplateTrait for MyNodeTemplate {
             graph.add_output_param(node_id, name.to_string(), types::MyDataType::Execution);
         };
 
-        match self {
-            MyNodeTemplate::Enter => {
-                exe_output(graph, "Enter");
+        match self.get_node_params().node_type {
+            NodeType::Execute(x) => {
+                exe_output(graph, x);
             }
+            NodeType::Executed(x) => {
+                exe_input(graph, x);
+            }
+            NodeType::ExecutedAndExecute(x, y) => {
+                exe_input(graph, x);
+                exe_output(graph, y);
+            }
+            NodeType::Data => {}
+        }
+
+        match self {
+            MyNodeTemplate::Enter => {}
 
             MyNodeTemplate::Ask => {
-                exe_input(graph, "");
-                exe_output(graph, "");
-                classic_input(graph, "What ?", types::MyDataType::String, types::MyValueType::String {
-                    value: "".to_string(),
-                });
+                classic_input(
+                    graph,
+                    "What ?",
+                    types::MyDataType::String,
+                    types::MyValueType::String {
+                        value: "".to_string(),
+                    }
+                );
                 classic_output(graph, "Answer", types::MyDataType::String);
             }
             MyNodeTemplate::If => {
-                exe_input(graph, "");
-                exe_output(graph, "");
-                exe_output(graph, "");
-                exe_output(graph, "");
+                exe_output(graph, "If");
+                exe_output(graph, "Else");
                 classic_input(graph, "", types::MyDataType::String, types::MyValueType::String {
                     value: "".to_string(),
                 });
@@ -184,11 +220,14 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 });
             }
             MyNodeTemplate::Print => {
-                exe_input(graph, "");
-                exe_output(graph, "");
-                classic_input(graph, "What ?", types::MyDataType::String, types::MyValueType::String {
-                    value: "".to_string(),
-                });
+                classic_input(
+                    graph,
+                    "What ?",
+                    types::MyDataType::String,
+                    types::MyValueType::String {
+                        value: "".to_string(),
+                    }
+                );
             }
             MyNodeTemplate::Function(x) => {
                 if let Some(function_index) = x {
