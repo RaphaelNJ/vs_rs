@@ -63,8 +63,6 @@ fn evaluate_function(
     next_node: &Node<nodes::MyNodeData>,
     outputs_cache: &mut HashMap<OutputId, String>
 ) -> String {
-    // println!("{}", node.label);
-
     let mut inputs = vec![];
 
     for y in next_node.inputs(graph) {
@@ -73,13 +71,16 @@ fn evaluate_function(
             continue;
         }
         if let Some(z) = graph.connection(y.id) {
-            inputs.push(
-                outputs_cache
-                    .get(&z)
-                    .clone()
-                    .map_or(None, |x| Some(x.to_string()))
-            );
-            println!("{:?} -- {:?}", z, outputs_cache);
+            let mut input = outputs_cache
+                .get(&z)
+                .clone()
+                .map_or(None, |x| Some(x.to_string()));
+            if input.is_none() {
+                input = Some(
+                    evaluate_output(&graph, &graph[graph.get_output(z).node], outputs_cache)
+                );
+            }
+            inputs.push(input);
         } else {
             inputs.push(
                 Some(match &y.value {
@@ -87,7 +88,7 @@ fn evaluate_function(
                     types::MyValueType::Integer { value } => value.to_string(),
                     types::MyValueType::Float { value } => value.to_string(),
                     types::MyValueType::Boolean { value } => value.to_string(),
-                    types::MyValueType::Execution => "".to_string(),
+                    types::MyValueType::Execution => String::new(),
                 })
             );
         }
@@ -96,9 +97,6 @@ fn evaluate_function(
         .into_iter()
         .filter_map(|option| option)
         .collect();
-
-    println!("{:?}", filtered_inputs);
-    println!("{:?}", next_node.user_data.template);
 
     let mut executions = vec![];
     let mut executions_index = vec![];
@@ -125,8 +123,6 @@ fn evaluate_function(
         }
     }
 
-    println!("exe -> {:?}", executions);
-
     let script_line = next_node.user_data.template.compile_to(
         outputs_cache,
         &executions,
@@ -134,11 +130,50 @@ fn evaluate_function(
         next_node
     );
 
-    println!("THE LINE -> {}", script_line);
-
     format!(
         "{} {}",
         script_line,
         executions.get(0).map_or("", |x| x)
     )
+}
+
+fn evaluate_output(
+    graph: &MyGraph,
+    output_node: &Node<nodes::MyNodeData>,
+    outputs_cache: &mut HashMap<OutputId, String>
+) -> String {
+    let mut inputs = vec![];
+
+    for x in output_node.input_ids() {
+        if let Some(y) = graph.connection(x) {
+            let output = evaluate_output(graph, &graph[graph[y].node], outputs_cache);
+            outputs_cache.insert(y, output.clone()); // technically, its not nessesary to put it in the cache, but if we dont want to recalculate it agin, thats preferable
+            inputs.push(output);
+        } else {
+            inputs.push(match &graph.get_input(x).value {
+                types::MyValueType::String { value } => format!("\"{value}\""),
+                types::MyValueType::Integer { value } => value.to_string(),
+                types::MyValueType::Float { value } => value.to_string(),
+                types::MyValueType::Boolean { value } => value.to_string(),
+                types::MyValueType::Execution => String::new(),
+            });
+        }
+    }
+    return output_node.user_data.template.evaluate_data(graph, output_node, outputs_cache, &inputs);
+    // for x in output_node.input_ids() {
+    //     println!(
+    //         "{}",
+    //         graph[graph.get_input(x).node].user_data.template.evaluate_data(
+    //             graph,
+    //             output_node,
+    //             outputs_cache
+    //         )
+    //     );
+    // }
+    // for x in output_node.output_ids() {
+    //     if let Some(y) = outputs_cache.get(&x) {
+    //         return y.clone();
+    //     }
+    // }
+    // String::new()
 }

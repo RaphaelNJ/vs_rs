@@ -10,7 +10,7 @@ use bincode;
 
 use crate::functions;
 use crate::types;
-use crate::app;
+use crate::app::{ self, MyGraph };
 /// The NodeData holds a custom data struct inside each node. It's useful to
 /// store additional information that doesn't live in parameters. For this
 /// example, the node data stores the template (i.e. the "type") of the node.
@@ -31,6 +31,8 @@ pub enum MyNodeTemplate {
     Print,
     Ask,
     If,
+    AddNumber,
+    PlusOne,
     Function(Option<functions::FunctionId>),
 }
 
@@ -57,8 +59,23 @@ impl MyNodeTemplate {
                 NodeParams { node_type: NodeType::ExecutedAndExecute("", ""), label: "Ask" },
             MyNodeTemplate::If =>
                 NodeParams { node_type: NodeType::ExecutedAndExecute("", "Continue"), label: "If" },
+            MyNodeTemplate::AddNumber =>
+                NodeParams { node_type: NodeType::Data, label: "Add Number" },
+            MyNodeTemplate::PlusOne => NodeParams { node_type: NodeType::Data, label: "Plus One" },
             MyNodeTemplate::Function(_) =>
                 NodeParams { node_type: NodeType::ExecutedAndExecute("", ""), label: "Function" },
+        }
+    }
+    pub fn evaluate_data(
+        &self,
+        graph: &MyGraph,
+        output_node: &Node<MyNodeData>,
+        outputs_cache: &HashMap<OutputId, String>,
+        inputs: &Vec<String>
+    ) -> String {
+        match self {
+            Self::AddNumber => format!("(+ {} {})", inputs[0], inputs[1]),
+            _ => String::new(),
         }
     }
 }
@@ -93,14 +110,14 @@ impl CompilesTo for MyNodeTemplate {
             }
             Self::If => {
                 format!(
-                    "(if (= {} {}) (do {}) (do {}))",
+                    "(if (= {} 1) (do {}) (do {}))",
                     filtered_inputs[0],
-                    filtered_inputs[1],
                     executions.get(1).map_or("", |x| x),
                     executions.get(2).map_or("", |x| x)
                 )
             }
             Self::Function(_) => "".to_string(),
+            _ => String::new(),
         }
     }
 }
@@ -121,7 +138,8 @@ impl NodeTemplateTrait for MyNodeTemplate {
     // this is what allows the library to show collapsible lists in the node finder.
     fn node_finder_categories(&self, _user_state: &mut Self::UserState) -> Vec<&'static str> {
         match self {
-            MyNodeTemplate::If => vec!["Logic"],
+            MyNodeTemplate::AddNumber | MyNodeTemplate::PlusOne | MyNodeTemplate::If =>
+                vec!["Logic"],
             MyNodeTemplate::Print | MyNodeTemplate::Ask => vec!["I/O"],
             MyNodeTemplate::Enter | MyNodeTemplate::Function(_) => vec!["Special"],
         }
@@ -198,6 +216,38 @@ impl NodeTemplateTrait for MyNodeTemplate {
         match self {
             MyNodeTemplate::Enter => {}
 
+            Self::AddNumber => {
+                classic_input(
+                    graph,
+                    "What ?",
+                    types::MyDataType::Integer,
+                    types::MyValueType::Integer {
+                        value: 0,
+                    }
+                );
+
+                classic_input(
+                    graph,
+                    "What ?",
+                    types::MyDataType::Integer,
+                    types::MyValueType::Integer {
+                        value: 0,
+                    }
+                );
+                classic_output(graph, "What ?", types::MyDataType::Integer);
+            }
+            Self::PlusOne => {
+                classic_input(
+                    graph,
+                    "What ?",
+                    types::MyDataType::Integer,
+                    types::MyValueType::Integer {
+                        value: 0,
+                    }
+                );
+                classic_output(graph, "What ?", types::MyDataType::Integer);
+            }
+
             MyNodeTemplate::Ask => {
                 classic_input(
                     graph,
@@ -212,11 +262,8 @@ impl NodeTemplateTrait for MyNodeTemplate {
             MyNodeTemplate::If => {
                 exe_output(graph, "If");
                 exe_output(graph, "Else");
-                classic_input(graph, "", types::MyDataType::String, types::MyValueType::String {
-                    value: "".to_string(),
-                });
-                classic_input(graph, "", types::MyDataType::String, types::MyValueType::String {
-                    value: "".to_string(),
+                classic_input(graph, "", types::MyDataType::Integer, types::MyValueType::Integer {
+                    value: 0,
                 });
             }
             MyNodeTemplate::Print => {
