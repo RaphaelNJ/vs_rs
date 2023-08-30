@@ -4,7 +4,7 @@ use egui_node_graph::{ NodeId, OutputId, InputId, Node };
 use slotmap::Key;
 
 use crate::app::{ self, MyGraph };
-use crate::nodes::{ self, CompilesTo };
+use crate::nodes::{ self };
 use crate::types::{ self, VariableValue };
 
 pub fn compile(
@@ -49,11 +49,7 @@ pub fn compile(
         });
     }
 
-    println!("\n\n-----------\n\n");
-
     result = format!("{} {}", result, evaluate_function(graph, enter_node, &mut HashMap::new()));
-
-    println!("\n\n-----------\n\n");
 
     Ok(result)
 }
@@ -160,20 +156,4 @@ fn evaluate_output(
         }
     }
     return output_node.user_data.template.evaluate_data(graph, output_node, outputs_cache, &inputs);
-    // for x in output_node.input_ids() {
-    //     println!(
-    //         "{}",
-    //         graph[graph.get_input(x).node].user_data.template.evaluate_data(
-    //             graph,
-    //             output_node,
-    //             outputs_cache
-    //         )
-    //     );
-    // }
-    // for x in output_node.output_ids() {
-    //     if let Some(y) = outputs_cache.get(&x) {
-    //         return y.clone();
-    //     }
-    // }
-    // String::new()
 }
