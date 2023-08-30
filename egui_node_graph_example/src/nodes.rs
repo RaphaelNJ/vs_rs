@@ -32,12 +32,11 @@ pub enum MyNodeTemplate {
     Ask,
     If,
     AddNumber,
-    PlusOne,
     Function(Option<functions::FunctionId>),
 }
 
 pub struct NodeParams {
-    node_type: NodeType,
+    node_type: &'static NodeType,
     label: &'static str,
 }
 
@@ -49,23 +48,20 @@ pub enum NodeType {
 }
 
 impl MyNodeTemplate {
-    fn get_node_params(&self) -> NodeParams {
+    fn get_node_params(&self) -> &'static NodeParams {
         match self {
-            MyNodeTemplate::Enter =>
-                NodeParams { node_type: NodeType::Execute("Enter"), label: "Enter" },
-            MyNodeTemplate::Print =>
-                NodeParams { node_type: NodeType::ExecutedAndExecute("", ""), label: "Print" },
-            MyNodeTemplate::Ask =>
-                NodeParams { node_type: NodeType::ExecutedAndExecute("", ""), label: "Ask" },
-            MyNodeTemplate::If =>
-                NodeParams { node_type: NodeType::ExecutedAndExecute("", "Continue"), label: "If" },
-            MyNodeTemplate::AddNumber =>
-                NodeParams { node_type: NodeType::Data, label: "Add Number" },
-            MyNodeTemplate::PlusOne => NodeParams { node_type: NodeType::Data, label: "Plus One" },
-            MyNodeTemplate::Function(_) =>
-                NodeParams { node_type: NodeType::ExecutedAndExecute("", ""), label: "Function" },
+            MyNodeTemplate::Enter => &NodeParams { node_type: &NodeType::Execute("Enter"), label: "Enter" },
+            MyNodeTemplate::Print => &NodeParams { node_type: &NodeType::ExecutedAndExecute("", ""), label: "Print" },
+            MyNodeTemplate::Ask => &NodeParams { node_type: &NodeType::ExecutedAndExecute("", ""), label: "Ask" },
+            MyNodeTemplate::If => &NodeParams { node_type: &NodeType::ExecutedAndExecute("", "Continue"), label: "If" },
+            MyNodeTemplate::AddNumber => &NodeParams { node_type: &NodeType::Data, label: "Add Number" },
+            MyNodeTemplate::Function(_) => &NodeParams { node_type: &NodeType::ExecutedAndExecute("", ""), label: "Function" },
         }
     }
+}
+
+
+impl MyNodeTemplate {
     pub fn evaluate_data(
         &self,
         graph: &MyGraph,
@@ -78,20 +74,8 @@ impl MyNodeTemplate {
             _ => String::new(),
         }
     }
-}
-
-pub trait CompilesTo {
-    fn compile_to(
-        &self,
-        outputs_cache: &HashMap<OutputId, String>,
-        executions: &Vec<String>,
-        filtered_inputs: &Vec<String>,
-        next_node: &Node<MyNodeData>
-    ) -> String;
-}
-
-impl CompilesTo for MyNodeTemplate {
-    fn compile_to(
+    
+    pub fn compile_to(
         &self,
         outputs_cache: &HashMap<OutputId, String>,
         executions: &Vec<String>,
@@ -138,7 +122,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
     // this is what allows the library to show collapsible lists in the node finder.
     fn node_finder_categories(&self, _user_state: &mut Self::UserState) -> Vec<&'static str> {
         match self {
-            MyNodeTemplate::AddNumber | MyNodeTemplate::PlusOne | MyNodeTemplate::If =>
+            MyNodeTemplate::AddNumber | MyNodeTemplate::If =>
                 vec!["Logic"],
             MyNodeTemplate::Print | MyNodeTemplate::Ask => vec!["I/O"],
             MyNodeTemplate::Enter | MyNodeTemplate::Function(_) => vec!["Special"],
@@ -236,18 +220,6 @@ impl NodeTemplateTrait for MyNodeTemplate {
                 );
                 classic_output(graph, "What ?", types::MyDataType::Integer);
             }
-            Self::PlusOne => {
-                classic_input(
-                    graph,
-                    "What ?",
-                    types::MyDataType::Integer,
-                    types::MyValueType::Integer {
-                        value: 0,
-                    }
-                );
-                classic_output(graph, "What ?", types::MyDataType::Integer);
-            }
-
             MyNodeTemplate::Ask => {
                 classic_input(
                     graph,
