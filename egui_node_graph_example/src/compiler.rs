@@ -39,6 +39,7 @@ pub fn compile(
     let enter_node = graph.nodes.get(enter_node_id).unwrap();
 
     let mut result = String::new();
+
     for x in &app_state.functions.get(app_state.main_graph_id).unwrap().variables_list {
         result = format!("{} (local {} {})", result, x.name, match &x.value {
             VariableValue::Boolean(y) => y.to_string(),
@@ -49,7 +50,7 @@ pub fn compile(
         });
     }
 
-    result = format!("{} {}", result, evaluate_function(graph, enter_node, &mut HashMap::new()));
+    result = format!("{} {:?}", result, evaluate_function(graph, enter_node, &mut HashMap::new()));
 
     Ok(result)
 }
@@ -58,7 +59,7 @@ fn evaluate_function(
     graph: &MyGraph,
     next_node: &Node<nodes::MyNodeData>,
     outputs_cache: &mut HashMap<OutputId, String>
-) -> String {
+) -> Result<String, (OutputId, InputId)> {
     let mut inputs = vec![];
 
     for y in next_node.inputs(graph) {
@@ -73,7 +74,12 @@ fn evaluate_function(
                 .map_or(None, |x| Some(x.to_string()));
             if input.is_none() {
                 input = Some(
-                    evaluate_output(&graph, &graph[graph.get_output(z).node], outputs_cache)
+                    evaluate_output(
+                        &graph,
+                        &graph[graph.get_output(z).node],
+                        outputs_cache,
+                        &mut vec![]
+                    )?
                 );
             }
             inputs.push(input);
@@ -110,9 +116,9 @@ fn evaluate_function(
             if x.1 == *y {
                 executions.push(
                     if let Some(z) = graph.nodes.get(graph[x.0].node) {
-                        evaluate_function(graph, z, outputs_cache)
+                        evaluate_function(graph, z, outputs_cache)?
                     } else {
-                        "".to_owned()
+                        String::new()
                     }
                 );
             }
@@ -126,25 +132,37 @@ fn evaluate_function(
         next_node
     );
 
-    format!(
+    Ok(format!(
         "{} {}",
         script_line,
         executions.get(0).map_or("", |x| x)
-    )
+    ))
 }
 
 fn evaluate_output(
     graph: &MyGraph,
     output_node: &Node<nodes::MyNodeData>,
-    outputs_cache: &mut HashMap<OutputId, String>
-) -> String {
+    outputs_cache: &mut HashMap<OutputId, String>,
+    already_explored_nodes: &mut Vec<NodeId>
+) -> Result<String, (OutputId, InputId)> {
+    already_explored_nodes.push(output_node.id);
+
     let mut inputs = vec![];
 
     for x in output_node.input_ids() {
         if let Some(y) = graph.connection(x) {
-            let output = evaluate_output(graph, &graph[graph[y].node], outputs_cache);
-            outputs_cache.insert(y, output.clone()); // technically, its not nessesary to put it in the cache, but if we dont want to recalculate it agin, thats preferable
-            inputs.push(output);
+            if already_explored_nodes.contains(&graph[graph[y].node].id) {
+                return Err((y, x));
+            } else {
+                let output = evaluate_output(
+                    graph,
+                    &graph[graph[y].node],
+                    outputs_cache,
+                    already_explored_nodes
+                )?;
+                outputs_cache.insert(y, output.clone()); // technically, its not nessesary to put it in the cache, but if we dont want to recalculate it agin, thats preferable
+                inputs.push(output);
+            }
         } else {
             inputs.push(match &graph.get_input(x).value {
                 types::MyValueType::String { value } => format!("\"{value}\""),
@@ -155,5 +173,5 @@ fn evaluate_output(
             });
         }
     }
-    return output_node.user_data.template.evaluate_data(graph, output_node, outputs_cache, &inputs);
+    return Ok(output_node.user_data.template.evaluate_data(graph, output_node, outputs_cache, &inputs));
 }
