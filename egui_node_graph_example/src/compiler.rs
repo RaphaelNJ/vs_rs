@@ -50,9 +50,10 @@ pub fn compile(
         });
     }
 
-    result = format!("{} {:?}", result, evaluate_function(graph, enter_node, &mut HashMap::new()));
-
-    Ok(result)
+    match evaluate_function(graph, enter_node, &mut HashMap::new()) {
+        Ok(prog) => Ok(format!("{} {:?}", result, prog)),
+        Err(err) => Err(format!("Error Of Compilation : \n{:?}", err)),
+    }
 }
 
 fn evaluate_function(
@@ -132,11 +133,13 @@ fn evaluate_function(
         next_node
     );
 
-    Ok(format!(
-        "{} {}",
-        script_line,
-        executions.get(0).map_or("", |x| x)
-    ))
+    Ok(
+        format!(
+            "{} {}",
+            script_line,
+            executions.get(0).map_or("", |x| x)
+        )
+    )
 }
 
 fn evaluate_output(
@@ -173,5 +176,7 @@ fn evaluate_output(
             });
         }
     }
-    return Ok(output_node.user_data.template.evaluate_data(graph, output_node, outputs_cache, &inputs));
+    return Ok(
+        output_node.user_data.template.evaluate_data(graph, output_node, outputs_cache, &inputs)
+    );
 }
