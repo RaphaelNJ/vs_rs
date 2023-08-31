@@ -18,12 +18,10 @@ use crate::functions;
 use crate::utils;
 use crate::variables;
 use crate::compiler;
-use crate::nodes;
+use crate::nodes::{ self, MyNodeTemplate };
 use crate::types;
 
 pub const DISABLE_RECURSIVE_FUNCTIONS: bool = true;
-
-
 
 /// The response type is used to encode side-effects produced when drawing a
 /// node in the graph. Most side-effects (creating new nodes, deleting existing
@@ -32,6 +30,7 @@ pub const DISABLE_RECURSIVE_FUNCTIONS: bool = true;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MyResponse {
     AsignFunction(NodeId, Option<functions::FunctionId>),
+    NodeShapeShiftFromCategory(NodeId, MyNodeTemplate),
 }
 
 /// The graph 'global' state. This state struct is passed around to the node and
@@ -56,7 +55,6 @@ impl Default for SaveOrLoad {
         SaveOrLoad::Load
     }
 }
-
 
 pub type MyGraph = Graph<nodes::MyNodeData, types::MyDataType, types::MyValueType>;
 type MyEditorState = GraphEditorState<
@@ -259,7 +257,9 @@ impl eframe::App for App {
                         std::mem::replace(&mut self.app_state.graph, NodeGraphExample::default())
                     );
 
-                    let text = match compiler::compile(&self.app_state, nodes::MyNodeTemplate::Enter) {
+                    let text = match
+                        compiler::compile(&self.app_state, nodes::MyNodeTemplate::Enter)
+                    {
                         Ok(value) => format!("The result is: {:?}", value),
                         Err(err) => format!("Execution error: {}", err),
                     };
@@ -356,6 +356,18 @@ impl NodeGraphExample {
                                 "Function {}",
                                 function.map_or("", |x| { &self.user_state.functions[x].name })
                             )
+                        );
+                        self.state.graph.remove_all_nodes_connections(node);
+                        self.state.graph.nodes[node].inputs.clear();
+                        self.state.graph.nodes[node].outputs.clear();
+                        let template = self.state.graph.nodes[node].user_data.template;
+                        template.build_node(&mut self.state.graph, &mut self.user_state, node);
+                    }
+                    MyResponse::NodeShapeShiftFromCategory(node, template) => {
+                        self.state.graph.nodes[node].user_data.template = template;
+                        let _ = self.state.graph.rename_node(
+                            node,
+                            template.node_graph_label(&mut self.user_state)
                         );
                         self.state.graph.remove_all_nodes_connections(node);
                         self.state.graph.nodes[node].inputs.clear();

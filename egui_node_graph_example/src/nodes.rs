@@ -31,13 +31,23 @@ pub enum MyNodeTemplate {
     Print,
     Ask,
     If,
+
+    CategoryAdd,
     AddNumber,
+    AddString,
+    
     Function(Option<functions::FunctionId>),
 }
 
 pub struct NodeParams {
     node_type: &'static NodeType,
     label: &'static str,
+    shape_shift_category: Option<ShapeShiftCategory>,
+}
+
+#[derive(PartialEq)]
+pub enum ShapeShiftCategory {
+    Add,
 }
 
 pub enum NodeType {
@@ -50,16 +60,59 @@ pub enum NodeType {
 impl MyNodeTemplate {
     fn get_node_params(&self) -> &'static NodeParams {
         match self {
-            MyNodeTemplate::Enter => &NodeParams { node_type: &NodeType::Execute("Enter"), label: "Enter" },
-            MyNodeTemplate::Print => &NodeParams { node_type: &NodeType::ExecutedAndExecute("", ""), label: "Print" },
-            MyNodeTemplate::Ask => &NodeParams { node_type: &NodeType::ExecutedAndExecute("", ""), label: "Ask" },
-            MyNodeTemplate::If => &NodeParams { node_type: &NodeType::ExecutedAndExecute("", "Continue"), label: "If" },
-            MyNodeTemplate::AddNumber => &NodeParams { node_type: &NodeType::Data, label: "Add Number" },
-            MyNodeTemplate::Function(_) => &NodeParams { node_type: &NodeType::ExecutedAndExecute("", ""), label: "Function" },
+            MyNodeTemplate::Enter =>
+                &(NodeParams {
+                    shape_shift_category: None,
+                    node_type: &NodeType::Execute("Enter"),
+                    label: "Enter",
+                }),
+            MyNodeTemplate::Print =>
+                &(NodeParams {
+                    shape_shift_category: None,
+                    node_type: &NodeType::ExecutedAndExecute("", ""),
+                    label: "Print",
+                }),
+            MyNodeTemplate::Ask =>
+                &(NodeParams {
+                    shape_shift_category: None,
+                    node_type: &NodeType::ExecutedAndExecute("", ""),
+                    label: "Ask",
+                }),
+            MyNodeTemplate::If =>
+                &(NodeParams {
+                    shape_shift_category: None,
+                    node_type: &NodeType::ExecutedAndExecute("", "Continue"),
+                    label: "If",
+                }),
+
+            MyNodeTemplate::CategoryAdd => {
+                &(NodeParams {
+                    shape_shift_category: Some(ShapeShiftCategory::Add),
+                    node_type: &NodeType::Data,
+                    label: "Add two types together",
+                })
+            }
+            MyNodeTemplate::AddNumber =>
+                &(NodeParams {
+                    shape_shift_category: Some(ShapeShiftCategory::Add),
+                    node_type: &NodeType::Data,
+                    label: "Add Number",
+                }),
+            MyNodeTemplate::AddString =>
+                &(NodeParams {
+                    shape_shift_category: Some(ShapeShiftCategory::Add),
+                    node_type: &NodeType::Data,
+                    label: "Add String",
+                }),
+            MyNodeTemplate::Function(_) =>
+                &(NodeParams {
+                    shape_shift_category: None,
+                    node_type: &NodeType::ExecutedAndExecute("", ""),
+                    label: "Function",
+                }),
         }
     }
 }
-
 
 impl MyNodeTemplate {
     pub fn evaluate_data(
@@ -71,10 +124,11 @@ impl MyNodeTemplate {
     ) -> String {
         match self {
             Self::AddNumber => format!("(+ {} {})", inputs[0], inputs[1]),
+            Self::AddString => format!("(.. {} {})", inputs[0], inputs[1]),
             _ => String::new(),
         }
     }
-    
+
     pub fn compile_to(
         &self,
         outputs_cache: &HashMap<OutputId, String>,
@@ -122,8 +176,8 @@ impl NodeTemplateTrait for MyNodeTemplate {
     // this is what allows the library to show collapsible lists in the node finder.
     fn node_finder_categories(&self, _user_state: &mut Self::UserState) -> Vec<&'static str> {
         match self {
-            MyNodeTemplate::AddNumber | MyNodeTemplate::If =>
-                vec!["Logic"],
+            MyNodeTemplate::AddString | MyNodeTemplate::AddNumber => vec![],
+            MyNodeTemplate::CategoryAdd | MyNodeTemplate::If => vec!["Logic"],
             MyNodeTemplate::Print | MyNodeTemplate::Ask => vec!["I/O"],
             MyNodeTemplate::Enter | MyNodeTemplate::Function(_) => vec!["Special"],
         }
@@ -200,6 +254,7 @@ impl NodeTemplateTrait for MyNodeTemplate {
         match self {
             MyNodeTemplate::Enter => {}
 
+            Self::CategoryAdd => {}
             Self::AddNumber => {
                 classic_input(
                     graph,
@@ -219,6 +274,27 @@ impl NodeTemplateTrait for MyNodeTemplate {
                     }
                 );
                 classic_output(graph, "What ?", types::MyDataType::Integer);
+            }
+            
+            Self::AddString => {
+                classic_input(
+                    graph,
+                    "What ?",
+                    types::MyDataType::String,
+                    types::MyValueType::String {
+                        value: String::new(),
+                    }
+                );
+
+                classic_input(
+                    graph,
+                    "What ?",
+                    types::MyDataType::String,
+                    types::MyValueType::String {
+                        value: String::new(),
+                    }
+                );
+                classic_output(graph, "What ?", types::MyDataType::String);
             }
             MyNodeTemplate::Ask => {
                 classic_input(
@@ -353,12 +429,44 @@ impl NodeDataTrait for MyNodeData {
     ) -> Vec<NodeResponse<app::MyResponse, MyNodeData>>
         where app::MyResponse: UserResponseTrait
     {
+        let mut responses = vec![];
+
         // This logic is entirely up to the user. In this case, we check if the
         // current node we're drawing is the active one, by comparing against
         // the value stored in the global user state, and draw different button
         // UIs based on that.
 
-        let mut responses = vec![];
+        if let Some(category) = &self.template.get_node_params().shape_shift_category {
+            let mut nodes = vec![];
+            for x in MyNodeTemplate::iter() {
+                if let Some(y) = &x.get_node_params().shape_shift_category {
+                    if category == y {
+                        nodes.push(x);
+                    }
+                }
+            }
+
+            let mut current_value = self.template.clone();
+
+            egui::ComboBox
+                ::from_id_source(node_id)
+                .selected_text(self.template.node_graph_label(user_state))
+                .width(74.0)
+                .show_ui(ui, |ui| {
+                    for x in nodes.iter() {
+                        ui.selectable_value(
+                            &mut current_value,
+                            *x,
+                            &x.node_graph_label(user_state)
+                        );
+                    }
+                });
+            if current_value != self.template {
+                responses.push(
+                    NodeResponse::User(app::MyResponse::NodeShapeShiftFromCategory(node_id, current_value))
+                );
+            }
+        }
 
         if let MyNodeTemplate::Function(mut current_value) = graph[node_id].user_data.template {
             let value = current_value.clone();
