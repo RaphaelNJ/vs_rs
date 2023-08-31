@@ -260,7 +260,7 @@ impl eframe::App for App {
                     let text = match
                         compiler::compile(&self.app_state, nodes::MyNodeTemplate::Enter)
                     {
-                        Ok(value) => format!("The result is: {:?}", value),
+                        Ok(value) => format!("The result is: {}", value),
                         Err(err) => format!("Execution error: {}", err),
                     };
                     println!("{}", text);
