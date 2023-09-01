@@ -1,3 +1,22 @@
+`cargo run` for native.
+`trunk build` for web.
+
+for web, you have to have a webserver with the root directory pointing to /dist
+
+
+
+
+
+
+
+
+
+
+--------------------------------------------------------
+
+
+
+
 # Egui Node Graph
 > There you have it! Now go build your next awesome node graph thing in Rust 🦀
 
