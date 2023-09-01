@@ -169,6 +169,12 @@ impl Default for CreateFunctionDialog {
     }
 }
 
+impl App {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        Self::default()
+    }
+}
+
 impl Default for App {
     fn default() -> Self {
         let mut functions = SlotMap::default();
