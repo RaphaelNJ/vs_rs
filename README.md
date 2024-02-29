@@ -43,6 +43,7 @@ cargo run
 - [ ] Créer un node "Return"
 - [x] Variables
 - [ ] Acceder au variables dans le code
+- [ ] Pouvoir modifier le compilateur avec un seul fichier de configuration
 
 ## Licence
 
