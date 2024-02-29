@@ -34,6 +34,7 @@ cargo run
 - [x] Sauvegarder le projet dans un fichier (boutton en haut a droite)
 - [x] Charger un projet depuis un fichier (boutton en haut a droite)
 - [x] Compilateur basique
+- [ ] Interpreteur Lua embarqué pour executer les programmes directement dans l'application
 - [x] Support de l'execution en branches (if/else, while)
 - [ ] Support de Linux (Wayland)
 - [ ] Support du WebAssembly (pouvoir tourner dans un navigateur)
