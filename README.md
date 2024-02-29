@@ -47,4 +47,4 @@ cargo run
 
 ## Licence
 
-Ce programme est distribué sous la [licence MIT](https://opensource.org/licenses/MIT).
+Ce programme est basé sur [egui_node_graph](https://github.com/setzer22/egui_node_graph) et est distribué sous la [licence MIT](https://opensource.org/licenses/MIT).
