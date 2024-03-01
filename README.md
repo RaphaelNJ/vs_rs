@@ -9,6 +9,11 @@ Ce projet est une alternative à Scratch qui offre une interface inspirée du bl
 ![Demande le nom de l'utilisateur pour lui redonner ensuite](https://github.com/RaphaelNJ/vs_rs/assets/52333330/4e50c826-99e0-4867-bad6-d8e6c3869c2d)
 ![Démostration des fonctions personalisés](https://github.com/RaphaelNJ/vs_rs/assets/52333330/ad6518a0-741d-4091-9cfa-f6b8092e8576)
 
+## Présentation
+Le suivant est une présentation du fonctionnement et de l'utilisation de ce logiciel en l'état:
+
+https://github.com/RaphaelNJ/vs_rs/assets/52333330/c0f5ac43-5668-45f3-b09b-e8faa9962fa5
+
 ## Installation
 
 1. Clonez le dépôt :
