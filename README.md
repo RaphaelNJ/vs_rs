@@ -1,7 +1,7 @@
 # vs_rs
 
 ## Description
-Ce projet est une alternative à Scratch qui offre une interface inspirée du blueprint d'Unreal Engine. Il a été entrepris car je trouve que Scratch utilise une approche peu ergonomique. De plus Scratch est interprété alors que ce projet converti le transforme en [code fennel](https://fennel-lang.org/) avant de l'executer, offrant une bien meilleure vitesse. L'objectif était donc de créer un langage de programmation visuel personnalisé en s'inspirant de Blueprint (ou Blot, pour Unity), que je considère personnellement comme plus ergonomique. Il est également possible de facilement modifier le compilateur pour en faire un langage spécialisé dans la création de jeux vidéo (comme Scratch), dans l'automatisation (comme Node Red ou Tasker) et bien plus encore.
+Ce projet est une alternative à Scratch qui offre une interface inspirée du blueprint d'Unreal Engine. Il a été entrepris car je trouve que Scratch utilise une approche peu ergonomique. De plus Scratch est interprété alors que ce projet converti le transforme en [code Fennel](https://fennel-lang.org/) avant de l'executer, offrant une bien meilleure vitesse. L'objectif était donc de créer un langage de programmation visuel personnalisé en s'inspirant de Blueprint (ou Blot, pour Unity), que je considère personnellement comme plus ergonomique. Il est également possible de facilement modifier le compilateur pour en faire un langage spécialisé dans la création de jeux vidéo (comme Scratch), dans l'automatisation (comme Node Red ou Tasker) et bien plus encore.
 
 ## Screenshots
 
@@ -49,6 +49,7 @@ cargo run
 - [x] Variables
 - [ ] Acceder au variables dans le code
 - [ ] Pouvoir modifier le compilateur avec un seul fichier de configuration
+- [ ] Remplacer Fennel par le machine code directement, en utilisant LLVM
 
 ## Licence
 
